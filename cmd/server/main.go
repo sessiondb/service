@@ -42,6 +42,7 @@ func main() {
 	queryService := service.NewQueryService(queryRepo, cfg)
 	instanceService := service.NewInstanceService(instanceRepo)
 	syncService := service.NewSyncService(instanceRepo, metaRepo)
+	metaService := service.NewMetadataService(metaRepo)
 	hub := service.NewNotificationHub()
 	syncWorker := service.NewSyncWorker(syncService, hub)
 
@@ -58,6 +59,7 @@ func main() {
 	auditHandler := handlers.NewAuditHandler(auditService, userRepo)
 	configHandler := handlers.NewConfigHandler(configService)
 	instanceHandler := handlers.NewInstanceHandler(instanceService, syncService)
+	metaHandler := handlers.NewMetadataHandler(metaService)
 
 	// Setup Router
 	r := gin.Default()
@@ -161,6 +163,10 @@ func main() {
 			instances := protected.Group("/instances")
 			{
 				instances.GET("", instanceHandler.ListInstances)
+				instances.GET("/:id/databases", metaHandler.ListDatabases)
+				instances.GET("/:id/databases/:dbName/tables", metaHandler.ListTables)
+				// Global table detail endpoint as per plan
+				instances.GET("/tables/:tableId", metaHandler.GetTableDetails)
 			}
 
 			admin := protected.Group("/admin")

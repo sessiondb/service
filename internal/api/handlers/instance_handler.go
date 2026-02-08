@@ -82,6 +82,9 @@ func (h *InstanceHandler) CreateInstance(c *gin.Context) {
 		return
 	}
 
+	// Trigger initial sync automatically (all databases)
+	go h.SyncService.SyncInstance(instance.ID, "")
+
 	c.JSON(http.StatusCreated, gin.H{"success": true, "data": instance})
 }
 
@@ -116,8 +119,14 @@ func (h *InstanceHandler) SyncInstance(c *gin.Context) {
 		return
 	}
 
+	type SyncRequest struct {
+		DatabaseName string `json:"databaseName"`
+	}
+	var req SyncRequest
+	_ = c.ShouldBindJSON(&req) // Ignore error, field is optional
+
 	// Trigger background sync
-	go h.SyncService.SyncInstance(id)
+	go h.SyncService.SyncInstance(id, req.DatabaseName)
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Sync started"})
 }

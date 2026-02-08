@@ -538,3 +538,56 @@ interface AuditLog {
   "message": "Fetching metadata for table 'users'..."
 }
 ```
+---
+
+## 10. Metadata Retrieval
+
+### List Databases
+**Endpoint**: `GET /instances/:id/databases`
+**Description**: Returns a list of all synced databases for a specific instance.
+
+**Response**:
+```json
+["production", "analytics", "staging"]
+```
+
+### List Tables
+**Endpoint**: `GET /instances/:id/databases/:dbName/tables`
+**Description**: Returns all tables within a specific database on an instance.
+
+**Response**:
+```json
+[
+  {
+    "id": "table-uuid",
+    "instanceId": "instance-uuid",
+    "database": "production",
+    "schema": "public",
+    "name": "users",
+    "type": "BASE TABLE"
+  }
+]
+```
+
+### Get Table Details
+**Endpoint**: `GET /instances/tables/:tableId`
+**Description**: Returns detailed metadata for a table, including all columns.
+
+**Response**:
+```json
+{
+  "id": "table-uuid",
+  "name": "users",
+  "database": "production",
+  "schema": "public",
+  "columns": [
+    {
+      "id": "col-uuid",
+      "name": "id",
+      "dataType": "uuid",
+      "isNullable": false,
+      "isPrimaryKey": true
+    }
+  ]
+}
+```

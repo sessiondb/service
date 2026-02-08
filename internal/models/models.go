@@ -136,11 +136,11 @@ type DBInstance struct {
 	Name        string `gorm:"not null" json:"name"`
 	Host        string `gorm:"not null" json:"host"`
 	Port        int    `gorm:"not null" json:"port"`
-	Type        string `gorm:"not null" json:"type"` // e.g., postgres, mysql
-	Username    string `gorm:"not null" json:"username,omitempty"`
-	Password    string `gorm:"not null" json:"-"` // Never export password in general JSON
-	Status      string `gorm:"default:'offline'" json:"status"`
-	LastSync    *time.Time `json:"lastSync"`
+	Type     string `gorm:"not null" json:"type"` // e.g., postgres, mysql
+	Username string `gorm:"not null" json:"username,omitempty"`
+	Password     string `gorm:"not null" json:"-"` // Never export password in general JSON
+	Status       string `gorm:"default:'offline'" json:"status"`
+	LastSync     *time.Time `json:"lastSync"`
 
 	// Relationships
 	Tables     []DBTable     `gorm:"foreignKey:InstanceID" json:"-"`
@@ -152,6 +152,7 @@ type DBInstance struct {
 type DBTable struct {
 	Base
 	InstanceID uuid.UUID `gorm:"index" json:"instanceId"`
+	Database   string    `json:"database"`
 	Schema     string    `json:"schema"`
 	Name       string    `json:"name"`
 	Type       string    `json:"type"` // BASE TABLE, VIEW
@@ -173,6 +174,7 @@ type DBColumn struct {
 type DBEntity struct {
 	Base
 	InstanceID uuid.UUID `gorm:"index" json:"instanceId"`
+	Database   string    `json:"database"`
 	Name       string    `json:"name"`
 	Type       string    `json:"type"` // ROLE, USER
 }
@@ -181,6 +183,7 @@ type DBEntity struct {
 type DBPrivilege struct {
 	Base
 	InstanceID uuid.UUID `gorm:"index" json:"instanceId"`
+	Database   string    `json:"database"`
 	Grantee    string    `json:"grantee"` // Name of user/role in target DB
 	Schema     string    `json:"schema"`
 	Table      string    `json:"table"`

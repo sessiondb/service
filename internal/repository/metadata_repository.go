@@ -50,3 +50,23 @@ func (r *MetadataRepository) ClearInstanceMetadata(instanceID uuid.UUID) error {
 		return nil
 	})
 }
+func (r *MetadataRepository) GetDatabases(instanceID uuid.UUID) ([]string, error) {
+	var databases []string
+	err := r.DB.Model(&models.DBTable{}).
+		Where("instance_id = ?", instanceID).
+		Distinct("database").
+		Pluck("database", &databases).Error
+	return databases, err
+}
+
+func (r *MetadataRepository) GetTables(instanceID uuid.UUID, database string) ([]models.DBTable, error) {
+	var tables []models.DBTable
+	err := r.DB.Where("instance_id = ? AND database = ?", instanceID, database).Find(&tables).Error
+	return tables, err
+}
+
+func (r *MetadataRepository) GetTableByID(tableID uuid.UUID) (*models.DBTable, error) {
+	var table models.DBTable
+	err := r.DB.Preload("Columns").First(&table, "id = ?", tableID).Error
+	return &table, err
+}

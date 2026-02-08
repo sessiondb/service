@@ -23,6 +23,7 @@ func (w *SyncWorker) Start() {
 	// 1. Listen for sync updates and broadcast to WS Hub
 	go func() {
 		for update := range w.SyncService.UpdateChan {
+			log.Printf("Worker broadcasting sync update: %+v", update)
 			w.Hub.Broadcast(update)
 		}
 	}()
@@ -49,7 +50,7 @@ func (w *SyncWorker) triggerPeriodicSync() {
 		// Only sync if last sync was more than 1 hour ago or never
 		if inst.LastSync == nil || time.Since(*inst.LastSync) > 1*time.Hour {
 			log.Printf("Worker Triggering auto-sync for %s", inst.Name)
-			go w.SyncService.SyncInstance(inst.ID)
+			go w.SyncService.SyncInstance(inst.ID, "")
 		}
 	}
 }
