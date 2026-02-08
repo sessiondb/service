@@ -591,3 +591,27 @@ interface AuditLog {
   ]
 }
 ```
+### Get Instance Schema (Hierarchical)
+**Endpoint**: `GET /instances/:id/schema` or `GET /schema?instanceId=:id`
+**Description**: Returns all databases, their tables, and columns in a single hierarchical JSON. Use this for the Schema Explorer.
+
+**Response**:
+```json
+{
+  "instanceId": "uuid",
+  "databases": [
+    {
+      "database": "production",
+      "tables": [
+        {
+          "id": "uuid",
+          "name": "users",
+          "database": "production",
+          "schema": "public",
+          "columns": [ ... ]
+        }
+      ]
+    }
+  ]
+}
+```

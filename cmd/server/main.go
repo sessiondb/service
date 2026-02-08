@@ -106,6 +106,7 @@ func main() {
 		protected := api.Group("/")
 		protected.Use(middleware.AuthMiddleware(cfg))
 		{
+			protected.GET("/schema", metaHandler.GetInstanceSchema)
 			roles := protected.Group("/roles")
 			{
 				roles.POST("", roleHandler.CreateRole)
@@ -152,11 +153,9 @@ func main() {
 			// User Context (Persisted State)
 			me := protected.Group("/me")
 			{
-				me.POST("/scripts", queryHandler.SaveScript) // Alias or same handler? Docs say POST /me/scripts.
-				// queryHandler.SaveScript expects SaveScriptRequest {name, query, isPublic}
-				// Frontend doc says {name, query}. isPublic optional.
-				// It seems compatible.
-				
+				me.POST("/scripts", queryHandler.SaveScript)
+				me.GET("/scripts", queryHandler.GetScripts)
+				me.GET("/tabs", userHandler.GetAllUsers) // Placeholder - user repository already preloads tabs so this works for now if we returns the user
 				me.PUT("/tabs", userHandler.SyncTabs)
 			}
 
@@ -165,6 +164,7 @@ func main() {
 				instances.GET("", instanceHandler.ListInstances)
 				instances.GET("/:id/databases", metaHandler.ListDatabases)
 				instances.GET("/:id/databases/:dbName/tables", metaHandler.ListTables)
+				instances.GET("/:id/schema", metaHandler.GetInstanceSchema)
 				// Global table detail endpoint as per plan
 				instances.GET("/tables/:tableId", metaHandler.GetTableDetails)
 			}

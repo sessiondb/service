@@ -10,124 +10,124 @@ import (
 // Base model ensuring UUIDs are used
 type Base struct {
 	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	CreatedAt time.Time `json:"timestamp"`
-	UpdatedAt time.Time `json:"updated_at"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // QueryTab model
 type QueryTab struct {
 	Base
-	UserID   uuid.UUID `gorm:"index"`
-	Name     string
-	Query    string
-	IsActive bool
+	UserID   uuid.UUID `gorm:"index" json:"userId"`
+	Name     string    `json:"name"`
+	Query    string    `json:"query"`
+	IsActive bool      `json:"isActive"`
 }
 
 // User model
 type User struct {
 	Base
-	Name             string `gorm:"not null"`
-	Email            string `gorm:"uniqueIndex;not null"`
-	PasswordHash     string
-	DBUsername       string `gorm:"uniqueIndex"`
-	RoleID           uuid.UUID
-	Role             Role
-	Status           string `gorm:"default:'active'"` // active, inactive, suspended
-	IsSessionBased   bool   `gorm:"default:false"`
-	SessionExpiresAt *time.Time
-	LastLogin        *time.Time
-	SSOID            string
+	Name             string     `gorm:"not null" json:"name"`
+	Email            string     `gorm:"uniqueIndex;not null" json:"email"`
+	PasswordHash     string     `json:"-"`
+	DBUsername       string     `gorm:"uniqueIndex" json:"dbUsername"`
+	RoleID           uuid.UUID  `json:"roleId"`
+	Role             Role       `json:"role"`
+	Status           string     `gorm:"default:'active'" json:"status"` // active, inactive, suspended
+	IsSessionBased   bool       `gorm:"default:false" json:"isSessionBased"`
+	SessionExpiresAt *time.Time `json:"sessionExpiresAt,omitempty"`
+	LastLogin        *time.Time `json:"lastLogin,omitempty"`
+	SSOID            string     `json:"ssoId,omitempty"`
 
-	Permissions      []Permission      `gorm:"foreignKey:UserID"`
-	ApprovalRequests []ApprovalRequest `gorm:"foreignKey:RequesterID"`
-	SavedScripts     []SavedScript     `gorm:"foreignKey:UserID"`
-	QueryTabs        []QueryTab        `gorm:"foreignKey:UserID"`
+	Permissions      []Permission      `gorm:"foreignKey:UserID" json:"permissions"`
+	ApprovalRequests []ApprovalRequest `gorm:"foreignKey:RequesterID" json:"approvalRequests,omitempty"`
+	SavedScripts     []SavedScript     `gorm:"foreignKey:UserID" json:"savedScripts"`
+	QueryTabs        []QueryTab        `gorm:"foreignKey:UserID" json:"queryTabs"`
 }
 
 // Role model
 type Role struct {
 	Base
-	Name         string `gorm:"uniqueIndex;not null"`
-	Description  string
-	IsSystemRole bool         `gorm:"default:false"`
-	Permissions  []Permission `gorm:"foreignKey:RoleID"`
-	UserCount    int          `gorm:"-"` // Computed field, not stored in DB
+	Name         string       `gorm:"uniqueIndex;not null" json:"name"`
+	Description  string       `json:"description,omitempty"`
+	IsSystemRole bool         `gorm:"default:false" json:"isSystemRole"`
+	Permissions  []Permission `gorm:"foreignKey:RoleID" json:"permissions"`
+	UserCount    int          `gorm:"-" json:"userCount,omitempty"` // Computed field, not stored in DB
 }
 
 // Permission model
 type Permission struct {
 	Base
-	RoleID     *uuid.UUID `gorm:"index"`
-	UserID     *uuid.UUID `gorm:"index"`
-	Database   string     `gorm:"not null"` // '*' for all
-	Table      string     `gorm:"not null"` // '*' for all
-	Privileges []string   `gorm:"type:text[]"` // Array of strings: READ, WRITE, DELETE, EXECUTE, ALL
-	Type       string     `gorm:"default:'permanent'"` // permanent, temp, expiring
-	ExpiresAt  *time.Time
+	RoleID     *uuid.UUID `gorm:"index" json:"roleId,omitempty"`
+	UserID     *uuid.UUID `gorm:"index" json:"userId,omitempty"`
+	Database   string     `gorm:"not null" json:"database"` // '*' for all
+	Table      string     `gorm:"not null" json:"table"` // '*' for all
+	Privileges []string   `gorm:"type:text[]" json:"privileges"` // Array of strings: READ, WRITE, DELETE, EXECUTE, ALL
+	Type       string     `gorm:"default:'permanent'" json:"type"` // permanent, temp, expiring
+	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
 }
 
 // ApprovalRequest model
 type ApprovalRequest struct {
 	Base
-	Type                 string `gorm:"not null"` // TEMP_USER, ROLE_CHANGE, PERM_UPGRADE
-	RequesterID          uuid.UUID
-	Requester            User `gorm:"foreignKey:RequesterID"`
-	TargetUserID         *uuid.UUID
-	Description          string
-	Justification        string
-	RequestedPermissions []byte     `gorm:"type:jsonb"` // Serialized permissions
-	Status               string     `gorm:"default:'pending'"` // pending, approved, rejected, partially_approved
-	ReviewedBy           *uuid.UUID
-	ReviewedAt           *time.Time
-	ApprovedPermissions  []byte    `gorm:"type:jsonb"`
-	RejectionReason      string
-	ExpiresAt            time.Time `gorm:"index"`
+	Type                 string     `gorm:"not null" json:"type"` // TEMP_USER, ROLE_CHANGE, PERM_UPGRADE
+	RequesterID          uuid.UUID  `json:"requesterId"`
+	Requester            User       `gorm:"foreignKey:RequesterID" json:"requester"`
+	TargetUserID         *uuid.UUID `json:"targetUserId,omitempty"`
+	Description          string     `json:"description"`
+	Justification        string     `json:"justification,omitempty"`
+	RequestedPermissions []byte     `gorm:"type:jsonb" json:"requestedPermissions,omitempty"` // Serialized permissions
+	Status               string     `gorm:"default:'pending'" json:"status"` // pending, approved, rejected, partially_approved
+	ReviewedBy           *uuid.UUID `json:"reviewedBy,omitempty"`
+	ReviewedAt           *time.Time `json:"reviewedAt,omitempty"`
+	ApprovedPermissions  []byte     `gorm:"type:jsonb" json:"approvedPermissions,omitempty"`
+	RejectionReason      string     `json:"rejectionReason,omitempty"`
+	ExpiresAt            time.Time  `gorm:"index" json:"expiresAt"`
 }
 
 // AuditLog model
 type AuditLog struct {
-	ID           uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	Timestamp    time.Time `gorm:"index"`
-	UserID       uuid.UUID `gorm:"index"`
-	User         User      `gorm:"foreignKey:UserID"`
-	SessionUser  string
-	Action       string `gorm:"index"`
-	Resource     string
-	ResourceType string
-	Database     string
-	Table        string
-	Query        string
-	QueryParams  []byte `gorm:"type:jsonb"`
-	Status       string // Success, Failure, Warning
-	ErrorMessage string
-	IPAddress    string
-	UserAgent    string
-	DurationMs   int64
-	RowsAffected int64
+	ID           uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	Timestamp    time.Time `gorm:"index" json:"timestamp"`
+	UserID       uuid.UUID `gorm:"index" json:"userId"`
+	User         User      `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	SessionUser  string    `json:"sessionUser,omitempty"`
+	Action       string    `gorm:"index" json:"action"`
+	Resource     string    `json:"resource"`
+	ResourceType string    `json:"resourceType,omitempty"`
+	Database     string    `json:"database,omitempty"`
+	Table        string    `json:"table,omitempty"`
+	Query        string    `json:"query,omitempty"`
+	QueryParams  []byte    `gorm:"type:jsonb" json:"queryParams,omitempty"`
+	Status       string    `json:"status"` // Success, Failure, Warning
+	ErrorMessage string    `json:"errorMessage,omitempty"`
+	IPAddress    string    `json:"ipAddress,omitempty"`
+	UserAgent    string    `json:"userAgent,omitempty"`
+	DurationMs   int64     `json:"durationMs,omitempty"`
+	RowsAffected int64     `json:"rowsAffected,omitempty"`
 }
 
 // QueryHistory model
 type QueryHistory struct {
-	ID              uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	UserID          uuid.UUID `gorm:"index"`
-	Query           string
-	Database        string
-	ExecutionTimeMs int64
-	RowsReturned    int64
-	Status          string
-	ErrorMessage    string
-	ExecutedAt      time.Time `gorm:"index"`
+	ID              uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	UserID          uuid.UUID `gorm:"index" json:"userId"`
+	Query           string    `json:"query"`
+	Database        string    `json:"database,omitempty"`
+	ExecutionTimeMs int64     `json:"executionTimeMs"`
+	RowsReturned    int64     `json:"rowsReturned"`
+	Status          string    `json:"status"`
+	ErrorMessage    string    `json:"errorMessage,omitempty"`
+	ExecutedAt      time.Time `gorm:"index" json:"executedAt"`
 }
 
 // SavedScript model
 type SavedScript struct {
 	Base
-	UserID      uuid.UUID `gorm:"index"`
-	Name        string
-	Description string
-	Query       string
-	IsPublic    bool `gorm:"default:false"`
+	UserID      uuid.UUID `gorm:"index" json:"userId"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	Query       string    `json:"query"`
+	IsPublic    bool      `gorm:"default:false" json:"isPublic"`
 }
 
 // DBInstance model

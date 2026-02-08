@@ -67,3 +67,28 @@ func (h *MetadataHandler) GetTableDetails(c *gin.Context) {
 
 	c.JSON(http.StatusOK, table)
 }
+func (h *MetadataHandler) GetInstanceSchema(c *gin.Context) {
+	idStr := c.Param("id")
+	if idStr == "" {
+		idStr = c.Query("instanceId")
+	}
+
+	if idStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Instance ID is required"})
+		return
+	}
+
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid instance ID"})
+		return
+	}
+
+	schema, err := h.Service.GetInstanceSchema(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, schema)
+}

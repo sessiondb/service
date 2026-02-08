@@ -16,18 +16,30 @@ func NewMetadataRepository(db *gorm.DB) *MetadataRepository {
 }
 
 func (r *MetadataRepository) SaveTables(tables []models.DBTable) error {
+	if len(tables) == 0 {
+		return nil
+	}
 	return r.DB.Save(&tables).Error
 }
 
 func (r *MetadataRepository) SaveColumns(columns []models.DBColumn) error {
+	if len(columns) == 0 {
+		return nil
+	}
 	return r.DB.Save(&columns).Error
 }
 
 func (r *MetadataRepository) SaveEntities(entities []models.DBEntity) error {
+	if len(entities) == 0 {
+		return nil
+	}
 	return r.DB.Save(&entities).Error
 }
 
 func (r *MetadataRepository) SavePrivileges(privileges []models.DBPrivilege) error {
+	if len(privileges) == 0 {
+		return nil
+	}
 	return r.DB.Save(&privileges).Error
 }
 
@@ -69,4 +81,9 @@ func (r *MetadataRepository) GetTableByID(tableID uuid.UUID) (*models.DBTable, e
 	var table models.DBTable
 	err := r.DB.Preload("Columns").First(&table, "id = ?", tableID).Error
 	return &table, err
+}
+func (r *MetadataRepository) GetFullSchema(instanceID uuid.UUID) ([]models.DBTable, error) {
+	var tables []models.DBTable
+	err := r.DB.Preload("Columns").Where("instance_id = ?", instanceID).Find(&tables).Error
+	return tables, err
 }
