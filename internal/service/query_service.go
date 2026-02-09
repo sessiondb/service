@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	_ "github.com/lib/pq" // Postgres driver
+	_ "github.com/go-sql-driver/mysql" // MySQL driver
+	_ "github.com/lib/pq"              // Postgres driver
 )
 
 type QueryService struct {
-	QueryRepo *repository.QueryRepository
-	Config    *config.Config
+	QueryRepo    *repository.QueryRepository
+	InstanceRepo *repository.InstanceRepository
+	Config       *config.Config
 }
 
 func NewQueryService(queryRepo *repository.QueryRepository, cfg *config.Config) *QueryService {
@@ -24,27 +26,37 @@ func NewQueryService(queryRepo *repository.QueryRepository, cfg *config.Config) 
 	}
 }
 
-func (s *QueryService) ExecuteQuery(userID uuid.UUID, database, query string) (interface{}, error) {
-	// TODO: Check permissions here using a PermissionService or Auth middleware context
+// SetInstanceRepo allows injection of InstanceRepository after construction
+func (s *QueryService) SetInstanceRepo(repo *repository.InstanceRepository) {
+	s.InstanceRepo = repo
+}
 
-	// Use default database from config if not provided
-	dbName := database
-	if dbName == "" {
-		dbName = s.Config.Database.Name
+func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, query string) (interface{}, error) {
+	// Lookup instance
+	instance, err := s.InstanceRepo.FindByID(instanceID)
+	if err != nil {
+		return nil, fmt.Errorf("instance not found: %w", err)
 	}
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
-		s.Config.Database.Host,
-		s.Config.Database.User,
-		s.Config.Database.Password,
-		dbName,
-		s.Config.Database.Port,
-		s.Config.Database.SSLMode,
-	)
+	// Build DSN based on instance type
+	var dsn string
+	var driverName string
+	switch instance.Type {
+	case "postgres":
+		driverName = "postgres"
+		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s sslmode=disable",
+			instance.Host, instance.Port, instance.Username, instance.Password)
+	case "mysql":
+		driverName = "mysql"
+		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/",
+			instance.Username, instance.Password, instance.Host, instance.Port)
+	default:
+		return nil, fmt.Errorf("unsupported database type: %s", instance.Type)
+	}
 
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open(driverName, dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to connect: %w", err)
 	}
 	defer db.Close()
 
@@ -64,9 +76,9 @@ func (s *QueryService) ExecuteQuery(userID uuid.UUID, database, query string) (i
 		history := &models.QueryHistory{
 			UserID:          userID,
 			Query:           query,
-			Database:        dbName,
+			Database:        instance.Name,
 			ExecutionTimeMs: duration,
-			RowsReturned:    0, // Update below if successful
+			RowsReturned:    0,
 			Status:          status,
 			ErrorMessage:    errMsg,
 			ExecutedAt:      start,
@@ -75,19 +87,11 @@ func (s *QueryService) ExecuteQuery(userID uuid.UUID, database, query string) (i
 	}()
 
 	if err != nil {
-		// Return friendly message if it's not a SELECT query or just an error
-		// Doc allows: { "message": "...", "rowsAffected": 1 }
-		return map[string]interface{}{
-			"message":      err.Error(),
-			"rowsAffected": 0,
-		}, nil // Return as valid response or error? Doc implies valid JSON response for non-SELECT usually. But if it's an error, maybe error?
-		// Let's return error for now if it failed.
 		return nil, err
 	}
 	defer rows.Close()
 
 	columns, _ := rows.Columns()
-	// Result format: { columns: [], rows: [[...], [...]], rowCount: N }
 	var dataRows [][]interface{}
 
 	for rows.Next() {

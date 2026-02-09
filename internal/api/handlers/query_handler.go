@@ -17,14 +17,14 @@ func NewQueryHandler(service *service.QueryService) *QueryHandler {
 }
 
 type ExecuteQueryRequest struct {
-	Database string `json:"database"` // Optional now
-	Query    string `json:"query" binding:"required"`
+	InstanceID string `json:"instanceId" binding:"required"`
+	Query      string `json:"query" binding:"required"`
 }
 
 type SaveScriptRequest struct {
 	Name     string `json:"name" binding:"required"`
 	Query    string `json:"query" binding:"required"`
-	IsPublic bool   `json:"is_public"` // Frontend might still send it? Doc removed it. Let's keep it optional.
+	IsPublic bool   `json:"isPublic"`
 }
 
 func (h *QueryHandler) ExecuteQuery(c *gin.Context) {
@@ -35,8 +35,14 @@ func (h *QueryHandler) ExecuteQuery(c *gin.Context) {
 	}
 
 	userID := c.MustGet("userID").(uuid.UUID)
+	
+	instanceID, err := uuid.Parse(req.InstanceID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid instance ID"})
+		return
+	}
 
-	result, err := h.Service.ExecuteQuery(userID, req.Database, req.Query)
+	result, err := h.Service.ExecuteQuery(userID, instanceID, req.Query)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
