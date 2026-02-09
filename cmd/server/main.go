@@ -41,6 +41,7 @@ func main() {
 	approvalService := service.NewApprovalService(approvalRepo)
 	queryService := service.NewQueryService(queryRepo, cfg)
 	queryService.SetInstanceRepo(instanceRepo) // Inject instance repo for query execution
+	queryService.SetAuditService(auditService) // Inject audit service for history logging
 	instanceService := service.NewInstanceService(instanceRepo)
 	syncService := service.NewSyncService(instanceRepo, metaRepo)
 	metaService := service.NewMetadataService(metaRepo)

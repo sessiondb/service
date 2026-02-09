@@ -87,37 +87,28 @@ type ApprovalRequest struct {
 
 // AuditLog model
 type AuditLog struct {
-	ID           uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	Timestamp    time.Time `gorm:"index" json:"timestamp"`
-	UserID       uuid.UUID `gorm:"index" json:"userId"`
-	User         User      `gorm:"foreignKey:UserID" json:"user,omitempty"`
-	SessionUser  string    `json:"sessionUser,omitempty"`
-	Action       string    `gorm:"index" json:"action"`
-	Resource     string    `json:"resource"`
-	ResourceType string    `json:"resourceType,omitempty"`
-	Database     string    `json:"database,omitempty"`
-	Table        string    `json:"table,omitempty"`
-	Query        string    `json:"query,omitempty"`
-	QueryParams  []byte    `gorm:"type:jsonb" json:"queryParams,omitempty"`
-	Status       string    `json:"status"` // Success, Failure, Warning
-	ErrorMessage string    `json:"errorMessage,omitempty"`
-	IPAddress    string    `json:"ipAddress,omitempty"`
-	UserAgent    string    `json:"userAgent,omitempty"`
-	DurationMs   int64     `json:"durationMs,omitempty"`
-	RowsAffected int64     `json:"rowsAffected,omitempty"`
-}
-
-// QueryHistory model
-type QueryHistory struct {
-	ID              uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	UserID          uuid.UUID `gorm:"index" json:"userId"`
-	Query           string    `json:"query"`
-	Database        string    `json:"database,omitempty"`
-	ExecutionTimeMs int64     `json:"executionTimeMs"`
-	RowsReturned    int64     `json:"rowsReturned"`
-	Status          string    `json:"status"`
-	ErrorMessage    string    `json:"errorMessage,omitempty"`
-	ExecutedAt      time.Time `gorm:"index" json:"executedAt"`
+	ID           uuid.UUID  `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	Timestamp    time.Time  `gorm:"index" json:"timestamp"`
+	UserID       uuid.UUID  `gorm:"index" json:"userId"`
+	User         User       `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	SessionUser  string     `json:"sessionUser,omitempty"`
+	Action       string     `gorm:"index" json:"action"`
+	Resource     string     `json:"resource"`
+	ResourceType string     `json:"resourceType,omitempty"`
+	InstanceID   *uuid.UUID `gorm:"index" json:"instanceId,omitempty"`
+	InstanceName string     `json:"instanceName,omitempty"`
+	Database     string     `json:"database,omitempty"`
+	Table        string     `json:"table,omitempty"`
+	Query        string     `json:"query,omitempty"`
+	QueryParams  []byte     `gorm:"type:jsonb" json:"queryParams,omitempty"`
+	Status       string     `json:"status"` // Success, Failure, Warning
+	ErrorMessage string     `json:"errorMessage,omitempty"`
+	IPAddress    string     `json:"ipAddress,omitempty"`
+	UserAgent    string     `json:"userAgent,omitempty"`
+	RequestID    string     `gorm:"index" json:"requestId,omitempty"`
+	SessionID    string     `gorm:"index" json:"sessionId,omitempty"`
+	DurationMs   int64      `json:"durationMs,omitempty"`
+	RowsAffected int64      `json:"rowsAffected,omitempty"`
 }
 
 // SavedScript model

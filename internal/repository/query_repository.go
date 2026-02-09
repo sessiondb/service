@@ -15,15 +15,7 @@ func NewQueryRepository(db *gorm.DB) *QueryRepository {
 	return &QueryRepository{DB: db}
 }
 
-func (r *QueryRepository) SaveHistory(history *models.QueryHistory) error {
-	return r.DB.Create(history).Error
-}
-
-func (r *QueryRepository) GetHistory(userID uuid.UUID) ([]models.QueryHistory, error) {
-	var history []models.QueryHistory
-	err := r.DB.Where("user_id = ?", userID).Order("executed_at desc").Limit(100).Find(&history).Error
-	return history, err
-}
+// Methods for QueryHistory removed as we now use AuditLog
 
 func (r *QueryRepository) SaveScript(script *models.SavedScript) error {
 	return r.DB.Create(script).Error

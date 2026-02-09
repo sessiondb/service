@@ -42,7 +42,10 @@ func (h *QueryHandler) ExecuteQuery(c *gin.Context) {
 		return
 	}
 
-	result, err := h.Service.ExecuteQuery(userID, instanceID, req.Query)
+	ipAddress := c.ClientIP()
+	userAgent := c.Request.UserAgent()
+
+	result, err := h.Service.ExecuteQuery(userID, instanceID, req.Query, ipAddress, userAgent)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

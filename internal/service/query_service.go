@@ -16,6 +16,7 @@ import (
 type QueryService struct {
 	QueryRepo    *repository.QueryRepository
 	InstanceRepo *repository.InstanceRepository
+	AuditService *AuditService
 	Config       *config.Config
 }
 
@@ -31,7 +32,12 @@ func (s *QueryService) SetInstanceRepo(repo *repository.InstanceRepository) {
 	s.InstanceRepo = repo
 }
 
-func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, query string) (interface{}, error) {
+// SetAuditService allows injection of AuditService after construction
+func (s *QueryService) SetAuditService(svc *AuditService) {
+	s.AuditService = svc
+}
+
+func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, query, ipAddress, userAgent string) (interface{}, error) {
 	// Lookup instance
 	instance, err := s.InstanceRepo.FindByID(instanceID)
 	if err != nil {
@@ -71,20 +77,13 @@ func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, quer
 		errMsg = err.Error()
 	}
 
-	// Async log history
-	go func() {
-		history := &models.QueryHistory{
-			UserID:          userID,
-			Query:           query,
-			Database:        instance.Name,
-			ExecutionTimeMs: duration,
-			RowsReturned:    0,
-			Status:          status,
-			ErrorMessage:    errMsg,
-			ExecutedAt:      start,
-		}
-		s.QueryRepo.SaveHistory(history)
-	}()
+	// Async log history via AuditService
+	if s.AuditService != nil {
+		s.AuditService.LogQuery(userID, instanceID, instance.Name, query, instance.Name, status, errMsg, ipAddress, userAgent, duration)
+	} else {
+		// Fallback logging if service not injected (shouldn't happen in prod)
+		fmt.Printf("WARNING: AuditService not injected into QueryService\n")
+	}
 
 	if err != nil {
 		return nil, err
@@ -127,8 +126,11 @@ func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, quer
 	}, nil
 }
 
-func (s *QueryService) GetHistory(userID uuid.UUID) ([]models.QueryHistory, error) {
-	return s.QueryRepo.GetHistory(userID)
+func (s *QueryService) GetHistory(userID uuid.UUID) ([]models.AuditLog, error) {
+	if s.AuditService == nil {
+		return nil, fmt.Errorf("audit service not injected")
+	}
+	return s.AuditService.GetQueryHistory(userID)
 }
 
 func (s *QueryService) SaveScript(userID uuid.UUID, name, query string, isPublic bool) (*models.SavedScript, error) {

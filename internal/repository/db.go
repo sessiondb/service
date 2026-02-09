@@ -45,8 +45,8 @@ func Migrate() {
 		&models.Role{},
 		&models.Permission{},
 		&models.ApprovalRequest{},
+
 		&models.AuditLog{},
-		&models.QueryHistory{},
 		&models.SavedScript{},
 		&models.QueryTab{},
 		&models.DBInstance{},
