@@ -20,9 +20,9 @@ func NewUserHandler(service *service.UserService, roleService *service.RoleServi
 
 type CreateUserRequest struct {
 	Name           string              `json:"name" binding:"required"`
-	Email          string              `json:"email"` // Optional if DBUsername used, but usually required
+	Email          string              `json:"email"` // Made optional for frontend compatibility
 	DBUsername     string              `json:"db_username"`
-	Password       string              `json:"password" binding:"required,min=8"`
+	Password       string              `json:"password"` // Made optional, will generate default if missing
 	Role           string              `json:"role" binding:"required"` // Role name
 	Status         string              `json:"status"`
 	IsSessionBased bool                `json:"isSessionBased"`
@@ -30,11 +30,11 @@ type CreateUserRequest struct {
 }
 
 type UpdateUserRequest struct {
-	Name           string              `json:"name"`
-	Role           string              `json:"role"`
-	DBUsername     string              `json:"db_username"`
-	Status         string              `json:"status"`
-	IsSessionBased bool                `json:"isSessionBased"`
+	Name           *string             `json:"name"`
+	Role           *string             `json:"role"`
+	DBUsername     *string             `json:"db_username"`
+	Status         *string             `json:"status"`
+	IsSessionBased *bool               `json:"isSessionBased"`
 	Permissions    []models.Permission `json:"permissions"`
 }
 
@@ -62,31 +62,35 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
+	// Handle missing email
+	if req.Email == "" {
+		if req.DBUsername != "" {
+			req.Email = req.DBUsername + "@sessiondb.local"
+		} else {
+			req.Email = req.Name + "@sessiondb.local"
+		}
+	}
+
+	// Handle missing password
+	if req.Password == "" {
+		req.Password = "SessionDB!2026" // Default secure password for initial setup
+	}
+
 	role, err := h.RoleService.GetRoleByName(req.Role)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid role: " + req.Role})
 		return
 	}
 
-	// We need to update UserService.CreateUser to accept these new fields or pass a User struct
-	// For now, I'll update UserService signature later, but here I can't call it easily with just name/email/pass/roleID
-	// I'll refactor UserService.CreateUser to take a *models.User or options.
-	// Or I'll temporary use the existing one and update fields.
-	
-	// Let's assume I'll update UserService to: CreateUser(user *models.User)
 	user := &models.User{
 		Name:           req.Name,
-		Email:          req.Email, // Ensure this is not empty if required
+		Email:          req.Email,
 		DBUsername:     req.DBUsername,
 		RoleID:         role.ID,
 		Status:         req.Status,
 		IsSessionBased: req.IsSessionBased,
-		Permissions:    req.Permissions, // Permissions might need handling forUserID
+		Permissions:    req.Permissions, 
 	}
-	
-	// Since I haven't updated UserService.CreateUser yet, I will do it in next step.
-	// This handler update assumes UserService has a compatible method.
-	// I'll use h.Service.Create(user) 
 	
 	createdUser, err := h.Service.Create(user, req.Password)
 	if err != nil {
@@ -142,23 +146,23 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	// Update fields
-	if req.Name != "" { user.Name = req.Name }
-	if req.DBUsername != "" { user.DBUsername = req.DBUsername }
-	if req.Status != "" { user.Status = req.Status }
-	if req.Role != "" {
-		role, err := h.RoleService.GetRoleByName(req.Role)
+	// Update fields if provided
+	if req.Name != nil { user.Name = *req.Name }
+	if req.DBUsername != nil { user.DBUsername = *req.DBUsername }
+	if req.Status != nil { user.Status = *req.Status }
+	if req.Role != nil {
+		role, err := h.RoleService.GetRoleByName(*req.Role)
 		if err == nil {
 			user.RoleID = role.ID
 		}
 	}
-	// Handle permissions update if needed
-	if req.Permissions != nil {
-		user.Permissions = req.Permissions // Simplified, normally need to manage relationships
+	if req.IsSessionBased != nil { 
+		user.IsSessionBased = *req.IsSessionBased 
 	}
-	user.IsSessionBased = req.IsSessionBased 
-	// Note: Boolean fields in partial updates are tricky with zero values. 
-	// Ideally use pointers or map[string]interface{}. For MVP/Demo, simple assignment.
+	
+	if req.Permissions != nil {
+		user.Permissions = req.Permissions
+	}
 
 	if err := h.Service.Update(user); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

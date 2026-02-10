@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
@@ -62,9 +63,17 @@ type Permission struct {
 	UserID     *uuid.UUID `gorm:"index" json:"userId,omitempty"`
 	Database   string     `gorm:"not null" json:"database"` // '*' for all
 	Table      string     `gorm:"not null" json:"table"` // '*' for all
-	Privileges []string   `gorm:"type:text[]" json:"privileges"` // Array of strings: READ, WRITE, DELETE, EXECUTE, ALL
+	Privileges pq.StringArray   `gorm:"type:text[]" json:"privileges"` // Array of strings: READ, WRITE, DELETE, EXECUTE, ALL
 	Type       string     `gorm:"default:'permanent'" json:"type"` // permanent, temp, expiring
 	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
+	Expiry     *time.Time `gorm:"-" json:"expiry,omitempty"` // Alias for frontend compatibility
+}
+
+func (p *Permission) BeforeSave(tx *gorm.DB) error {
+	if p.Expiry != nil && p.ExpiresAt == nil {
+		p.ExpiresAt = p.Expiry
+	}
+	return nil
 }
 
 // ApprovalRequest model
