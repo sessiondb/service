@@ -21,7 +21,7 @@ func (r *UserRepository) Create(user *models.User) error {
 
 func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
 	var user models.User
-	err := r.DB.Preload("Role.Permissions").Preload("Permissions").Preload("SavedScripts").Preload("QueryTabs").Where("email = ?", email).First(&user).Error
+	err := r.DB.Preload("Role.Permissions").Preload("Permissions").Preload("SavedScripts").Preload("QueryTabs").Preload("DBCredentials.Instance").Where("email = ?", email).First(&user).Error
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +30,7 @@ func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
 
 func (r *UserRepository) FindByID(id uuid.UUID) (*models.User, error) {
 	var user models.User
-	err := r.DB.Preload("Role.Permissions").Preload("Permissions").Preload("SavedScripts").Preload("QueryTabs").First(&user, id).Error
+	err := r.DB.Preload("Role.Permissions").Preload("Permissions").Preload("SavedScripts").Preload("QueryTabs").Preload("DBCredentials.Instance").First(&user, id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (r *UserRepository) FindByID(id uuid.UUID) (*models.User, error) {
 
 func (r *UserRepository) FindAll() ([]models.User, error) {
 	var users []models.User
-	err := r.DB.Preload("Role.Permissions").Preload("Permissions").Preload("SavedScripts").Preload("QueryTabs").Find(&users).Error
+	err := r.DB.Preload("Role.Permissions").Preload("Permissions").Preload("SavedScripts").Preload("QueryTabs").Preload("DBCredentials.Instance").Find(&users).Error
 	return users, err
 }
 

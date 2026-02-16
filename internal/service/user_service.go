@@ -10,11 +10,21 @@ import (
 )
 
 type UserService struct {
-	UserRepo *repository.UserRepository
+	UserRepo           *repository.UserRepository
+	ProvisioningService *DBUserProvisioningService
+	InstanceRepo       *repository.InstanceRepository
 }
 
-func NewUserService(userRepo *repository.UserRepository) *UserService {
-	return &UserService{UserRepo: userRepo}
+func NewUserService(
+	userRepo *repository.UserRepository,
+	provisioningService *DBUserProvisioningService,
+	instanceRepo *repository.InstanceRepository,
+) *UserService {
+	return &UserService{
+		UserRepo:           userRepo,
+		ProvisioningService: provisioningService,
+		InstanceRepo:       instanceRepo,
+	}
 }
 
 func (s *UserService) Create(user *models.User, password string) (*models.User, error) {
@@ -31,6 +41,28 @@ func (s *UserService) Create(user *models.User, password string) (*models.User, 
 
 	if err := s.UserRepo.Create(user); err != nil {
 		return nil, err
+	}
+
+	// Auto-provision DB users on all instances
+	instances, err := s.InstanceRepo.FindAll()
+	if err == nil && len(instances) > 0 {
+		for _, instance := range instances {
+			// Provision DB user
+			cred, err := s.ProvisioningService.ProvisionDBUser(user, &instance)
+			if err != nil {
+				// Log error but don't fail user creation
+				// TODO: Add proper logging
+				continue
+			}
+
+			// Grant permissions if user has any
+			if len(user.Permissions) > 0 {
+				if err := s.ProvisioningService.GrantPermissions(cred, user.Permissions); err != nil {
+					// Log error but continue
+					// TODO: Add proper logging
+				}
+			}
+		}
 	}
 
 	return user, nil

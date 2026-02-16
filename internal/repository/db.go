@@ -49,6 +49,7 @@ func Migrate() {
 		&models.AuditLog{},
 		&models.SavedScript{},
 		&models.QueryTab{},
+		&models.DBUserCredential{},
 		&models.DBInstance{},
 		&models.DBTable{},
 		&models.DBColumn{},

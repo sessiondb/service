@@ -21,7 +21,6 @@ func NewUserHandler(service *service.UserService, roleService *service.RoleServi
 type CreateUserRequest struct {
 	Name           string              `json:"name" binding:"required"`
 	Email          string              `json:"email"` // Made optional for frontend compatibility
-	DBUsername     string              `json:"db_username"`
 	Password       string              `json:"password"` // Made optional, will generate default if missing
 	Role           string              `json:"role" binding:"required"` // Role name
 	Status         string              `json:"status"`
@@ -32,7 +31,6 @@ type CreateUserRequest struct {
 type UpdateUserRequest struct {
 	Name           *string             `json:"name"`
 	Role           *string             `json:"role"`
-	DBUsername     *string             `json:"db_username"`
 	Status         *string             `json:"status"`
 	IsSessionBased *bool               `json:"isSessionBased"`
 	Permissions    []models.Permission `json:"permissions"`
@@ -64,11 +62,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 
 	// Handle missing email
 	if req.Email == "" {
-		if req.DBUsername != "" {
-			req.Email = req.DBUsername + "@sessiondb.local"
-		} else {
-			req.Email = req.Name + "@sessiondb.local"
-		}
+		req.Email = req.Name + "@sessiondb.local"
 	}
 
 	// Handle missing password
@@ -85,7 +79,6 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	user := &models.User{
 		Name:           req.Name,
 		Email:          req.Email,
-		DBUsername:     req.DBUsername,
 		RoleID:         role.ID,
 		Status:         req.Status,
 		IsSessionBased: req.IsSessionBased,
@@ -108,6 +101,22 @@ func (h *UserHandler) GetAllUsers(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, users)
+}
+
+func (h *UserHandler) GetMe(c *gin.Context) {
+	// Get user ID from JWT token (set by auth middleware)
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	user, err := h.Service.GetUserByID(userID.(uuid.UUID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+	c.JSON(http.StatusOK, user)
 }
 
 func (h *UserHandler) GetUser(c *gin.Context) {
@@ -148,7 +157,6 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 
 	// Update fields if provided
 	if req.Name != nil { user.Name = *req.Name }
-	if req.DBUsername != nil { user.DBUsername = *req.DBUsername }
 	if req.Status != nil { user.Status = *req.Status }
 	if req.Role != nil {
 		role, err := h.RoleService.GetRoleByName(*req.Role)

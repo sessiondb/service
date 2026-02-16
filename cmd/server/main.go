@@ -31,12 +31,14 @@ func main() {
 	auditRepo := repository.NewAuditRepository(repository.DB)
 	instanceRepo := repository.NewInstanceRepository(repository.DB)
 	metaRepo := repository.NewMetadataRepository(repository.DB)
+	dbUserCredRepo := repository.NewDBUserCredentialRepository(repository.DB)
 
 	// Initialize Services
 	auditService := service.NewAuditService(auditRepo)
 	authService := service.NewAuthService(userRepo, cfg) // TODO: Inject AuditService into other services for automatic logging
 	roleService := service.NewRoleService(roleRepo, userRepo)
-	userService := service.NewUserService(userRepo)
+	provisioningService := service.NewDBUserProvisioningService(dbUserCredRepo, instanceRepo)
+	userService := service.NewUserService(userRepo, provisioningService, instanceRepo)
 	configService := service.NewConfigService()
 	approvalService := service.NewApprovalService(approvalRepo)
 	queryService := service.NewQueryService(queryRepo, cfg)
@@ -122,6 +124,7 @@ func main() {
 			{
 				users.GET("", userHandler.GetAllUsers)
 				users.POST("", userHandler.CreateUser)
+				users.GET("/me", userHandler.GetMe) // Must be before /:id to avoid conflict
 				users.GET("/:id", userHandler.GetUser)
 				users.PUT("/:id", userHandler.UpdateUser)
 				users.DELETE("/:id", userHandler.DeleteUser)

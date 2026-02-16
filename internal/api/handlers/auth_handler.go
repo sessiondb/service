@@ -70,7 +70,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 				"name":           user.Name,
 				"email":          user.Email,
 				"role":           user.Role.Name,
-				"db_username":    user.DBUsername,
 				"status":         user.Status,
 				"isSessionBased": user.IsSessionBased,
 				"lastLogin":      user.LastLogin,

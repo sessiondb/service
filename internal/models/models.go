@@ -31,7 +31,6 @@ type User struct {
 	Name             string     `gorm:"not null" json:"name"`
 	Email            string     `gorm:"uniqueIndex;not null" json:"email"`
 	PasswordHash     string     `json:"-"`
-	DBUsername       string     `gorm:"uniqueIndex" json:"dbUsername"`
 	RoleID           uuid.UUID  `json:"roleId"`
 	Role             Role       `json:"role"`
 	Status           string     `gorm:"default:'active'" json:"status"` // active, inactive, suspended
@@ -40,10 +39,11 @@ type User struct {
 	LastLogin        *time.Time `json:"lastLogin,omitempty"`
 	SSOID            string     `json:"ssoId,omitempty"`
 
-	Permissions      []Permission      `gorm:"foreignKey:UserID" json:"permissions"`
-	ApprovalRequests []ApprovalRequest `gorm:"foreignKey:RequesterID" json:"approvalRequests,omitempty"`
-	SavedScripts     []SavedScript     `gorm:"foreignKey:UserID" json:"savedScripts"`
-	QueryTabs        []QueryTab        `gorm:"foreignKey:UserID" json:"queryTabs"`
+	Permissions      []Permission        `gorm:"foreignKey:UserID" json:"permissions"`
+	ApprovalRequests []ApprovalRequest   `gorm:"foreignKey:RequesterID" json:"approvalRequests,omitempty"`
+	SavedScripts     []SavedScript       `gorm:"foreignKey:UserID" json:"savedScripts"`
+	QueryTabs        []QueryTab          `gorm:"foreignKey:UserID" json:"queryTabs"`
+	DBCredentials    []DBUserCredential  `gorm:"foreignKey:UserID" json:"dbCredentials,omitempty"`
 }
 
 // Role model
@@ -116,6 +116,7 @@ type AuditLog struct {
 	UserAgent    string     `json:"userAgent,omitempty"`
 	RequestID    string     `gorm:"index" json:"requestId,omitempty"`
 	SessionID    string     `gorm:"index" json:"sessionId,omitempty"`
+	DBUsername   string     `gorm:"index" json:"dbUsername,omitempty"` // Denormalized for performance
 	DurationMs   int64      `json:"durationMs,omitempty"`
 	RowsAffected int64      `json:"rowsAffected,omitempty"`
 }
@@ -128,6 +129,21 @@ type SavedScript struct {
 	Description string    `json:"description,omitempty"`
 	Query       string    `json:"query"`
 	IsPublic    bool      `gorm:"default:false" json:"isPublic"`
+}
+
+// DBUserCredential model - Maps platform users to database users
+type DBUserCredential struct {
+	Base
+	UserID     uuid.UUID  `gorm:"index;not null" json:"userId"`
+	User       User       `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	InstanceID uuid.UUID  `gorm:"index;not null" json:"instanceId"`
+	Instance   DBInstance `gorm:"foreignKey:InstanceID" json:"instance,omitempty"`
+	
+	DBUsername string     `gorm:"not null;index" json:"dbUsername"` // Actual DB username (e.g., sdb_dev_john_perm)
+	DBPassword string     `gorm:"not null" json:"-"`                // AES-256 encrypted password
+	
+	ExpiresAt  *time.Time `gorm:"index" json:"expiresAt,omitempty"` // For temporary users
+	Status     string     `gorm:"default:'active';index" json:"status"` // active, expired, revoked
 }
 
 // DBInstance model
