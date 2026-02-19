@@ -19,19 +19,44 @@ func main() {
 	repository.ConnectDB(cfg)
 
 	email := "admin@example.com"
-	newPassword := "Start123!"
+	name := "admin"
+	password := "Admin123!"
 
-	// Hash the new password
-	hashedPassword, err := utils.HashPassword(newPassword)
+	// Hash the password
+	hashedPassword, err := utils.HashPassword(password)
 	if err != nil {
 		log.Fatalf("Failed to hash password: %v", err)
 	}
 
-	// Update the user
-	// We use Model(&models.User{}) to ensure GORM knows which table to update
-	if err := repository.DB.Model(&models.User{}).Where("email = ?", email).Update("password_hash", hashedPassword).Error; err != nil {
-		log.Fatalf("Failed to update user password: %v", err)
-	}
+	var user models.User
+	result := repository.DB.Where("email = ? OR name = ?", email, name).First(&user)
 
-	log.Printf("Successfully reset password for %s to %s", email, newPassword)
+	if result.Error == nil {
+		// User exists, reset password
+		user.PasswordHash = hashedPassword
+		user.Name = name // Ensure name is "admin"
+		if err := repository.DB.Save(&user).Error; err != nil {
+			log.Fatalf("Failed to reset password: %v", err)
+		}
+		log.Printf("Successfully reset password for user %s (%s) to %s", user.Name, user.Email, password)
+	} else {
+		// User does not exist, create new admin
+		var role models.Role
+		if err := repository.DB.Where("name = ?", "Super Admin").First(&role).Error; err != nil {
+			log.Fatalf("Failed to find Super Admin role: %v", err)
+		}
+
+		user = models.User{
+			Name:         name,
+			Email:        email,
+			PasswordHash: hashedPassword,
+			RoleID:       role.ID,
+			Status:       "active",
+		}
+
+		if err := repository.DB.Create(&user).Error; err != nil {
+			log.Fatalf("Failed to create admin user: %v", err)
+		}
+		log.Printf("Successfully created new admin user: %s (%s) with password: %s", name, email, password)
+	}
 }
