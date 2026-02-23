@@ -6,10 +6,11 @@ import (
 	"log"
 	"sessiondb/internal/models"
 	"sessiondb/internal/repository"
+	"sessiondb/internal/utils"
 	"time"
 
-	"github.com/google/uuid"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 )
 
@@ -18,6 +19,7 @@ type DatabaseScraper interface {
 	FetchColumns(db *sql.DB, tableID uuid.UUID, schema, table string) ([]models.DBColumn, error)
 	FetchEntities(db *sql.DB, instanceID uuid.UUID, dbName string) ([]models.DBEntity, error)
 	FetchPrivileges(db *sql.DB, instanceID uuid.UUID, dbName string) ([]models.DBPrivilege, error)
+	FetchRoleMemberships(db *sql.DB, instanceID uuid.UUID) ([]models.DBRoleMembership, error)
 	FetchDatabases(db *sql.DB) ([]string, error)
 	GetDSN(instance *models.DBInstance, dbName string) string
 }
@@ -95,8 +97,36 @@ func (s *SyncService) SyncInstance(id uuid.UUID, targetDB string) error {
 		return err
 	}
 
+	// Fetch cluster-level entities (users/roles) once using the root connection.
+	// pg_roles and mysql.user are cluster-wide, not per-database, so calling
+	// this inside the per-DB loop would cause duplicate inserts.
+	s.broadcast(id, "Users", "processing", 22, "Fetching database users and roles...")
+	entities, err := scraper.FetchEntities(rootDb, id, "")
+	if err != nil {
+		s.broadcast(id, "Users", "error", 22, "Failed to fetch entities: "+err.Error())
+		return err
+	}
+	log.Printf("[Sync %s] Fetched %d entities", id, len(entities))
+	if err := s.MetaRepo.SaveEntities(entities); err != nil {
+		s.broadcast(id, "Users", "error", 22, "Failed to save entities: "+err.Error())
+		log.Printf("[Sync %s] SaveEntities error: %v", id, err)
+		return err
+	}
+	log.Printf("[Sync %s] Saved %d entities successfully", id, len(entities))
+
+	// Fetch and save role memberships
+	s.broadcast(id, "Users", "processing", 23, "Fetching role hierarchies...")
+	memberships, err := scraper.FetchRoleMemberships(rootDb, id)
+	if err != nil {
+		s.broadcast(id, "Users", "error", 23, "Failed to fetch role memberships: "+err.Error())
+		return err
+	}
+	if err := s.MetaRepo.SaveRoleMemberships(memberships); err != nil {
+		return err
+	}
+
 	for dbIdx, dbName := range dbsToSync {
-		currentPercentage := 20 + (dbIdx * 80 / len(dbsToSync))
+		currentPercentage := 25 + (dbIdx * 75 / len(dbsToSync))
 		s.broadcast(id, dbName, "processing", currentPercentage, "Starting sync for database: "+dbName)
 
 		// Connect to specific DB
@@ -131,18 +161,7 @@ func (s *SyncService) SyncInstance(id uuid.UUID, targetDB string) error {
 			}
 		}
 
-		// 4. Fetch Roles/Users
-		entities, err := scraper.FetchEntities(db, id, dbName)
-		if err != nil {
-			db.Close()
-			return err
-		}
-		if err := s.MetaRepo.SaveEntities(entities); err != nil {
-			db.Close()
-			return err
-		}
-
-		// 5. Fetch Privileges
+		// 4. Fetch Privileges
 		privs, err := scraper.FetchPrivileges(db, id, dbName)
 		if err != nil {
 			db.Close()
@@ -267,12 +286,23 @@ func (ps *PostgresScraper) FetchEntities(db *sql.DB, instanceID uuid.UUID, dbNam
 	for rows.Next() {
 		var e models.DBEntity
 		var canLogin bool
-		e.InstanceID = instanceID
-		e.Database = dbName
-		if err := rows.Scan(&e.Name, &canLogin); err != nil {
+		var originalName string
+		if err := rows.Scan(&originalName, &canLogin); err != nil {
 			return nil, err
 		}
-		if canLogin { e.Type = "USER" } else { e.Type = "ROLE" }
+
+		e.ID = uuid.New()
+		e.InstanceID = instanceID
+		e.Database = dbName
+		e.DBKey = originalName
+
+		if canLogin {
+			e.Type = "USER"
+			e.Name = originalName
+		} else {
+			e.Type = "ROLE"
+			e.Name = utils.ToPascalCase(originalName)
+		}
 		entities = append(entities, e)
 	}
 	return entities, nil
@@ -280,7 +310,7 @@ func (ps *PostgresScraper) FetchEntities(db *sql.DB, instanceID uuid.UUID, dbNam
 
 func (ps *PostgresScraper) FetchPrivileges(db *sql.DB, instanceID uuid.UUID, dbName string) ([]models.DBPrivilege, error) {
 	rows, err := db.Query(`
-		SELECT grantee, table_schema, table_name, privilege_type 
+		SELECT grantee, table_schema, table_name, privilege_type, is_grantable
 		FROM information_schema.table_privileges 
 		WHERE table_schema NOT IN ('pg_catalog', 'information_schema')`)
 	if err != nil {
@@ -291,14 +321,40 @@ func (ps *PostgresScraper) FetchPrivileges(db *sql.DB, instanceID uuid.UUID, dbN
 	var privs []models.DBPrivilege
 	for rows.Next() {
 		var p models.DBPrivilege
+		var isGrantable string
 		p.InstanceID = instanceID
 		p.Database = dbName
-		if err := rows.Scan(&p.Grantee, &p.Schema, &p.Table, &p.Privilege); err != nil {
+		if err := rows.Scan(&p.Grantee, &p.Schema, &p.Table, &p.Privilege, &isGrantable); err != nil {
 			return nil, err
 		}
+		p.IsGrantable = isGrantable == "YES"
 		privs = append(privs, p)
 	}
 	return privs, nil
+}
+
+func (ps *PostgresScraper) FetchRoleMemberships(db *sql.DB, instanceID uuid.UUID) ([]models.DBRoleMembership, error) {
+	rows, err := db.Query(`
+		SELECT r.rolname as role_name, m.rolname as member_name
+		FROM pg_auth_members am
+		JOIN pg_roles r ON am.roleid = r.oid
+		JOIN pg_roles m ON am.member = m.oid`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var memberships []models.DBRoleMembership
+	for rows.Next() {
+		var m models.DBRoleMembership
+		m.ID = uuid.New()
+		m.InstanceID = instanceID
+		if err := rows.Scan(&m.RoleName, &m.MemberName); err != nil {
+			return nil, err
+		}
+		memberships = append(memberships, m)
+	}
+	return memberships, nil
 }
 
 // --- MySQL Scraper ---
@@ -379,8 +435,8 @@ func (ms *MySQLScraper) FetchColumns(db *sql.DB, tableID uuid.UUID, schema, tabl
 }
 
 func (ms *MySQLScraper) FetchEntities(db *sql.DB, instanceID uuid.UUID, dbName string) ([]models.DBEntity, error) {
-	// MySQL users are global, not per-DB. But for cataloging, we'll associate them.
-	rows, err := db.Query(`SELECT user, 'USER' FROM mysql.user`)
+	// MySQL users are global, not per-DB.
+	rows, err := db.Query(`SELECT user FROM mysql.user`)
 	if err != nil {
 		return nil, nil
 	}
@@ -389,11 +445,18 @@ func (ms *MySQLScraper) FetchEntities(db *sql.DB, instanceID uuid.UUID, dbName s
 	var entities []models.DBEntity
 	for rows.Next() {
 		var e models.DBEntity
-		e.InstanceID = instanceID
-		e.Database = dbName
-		if err := rows.Scan(&e.Name, &e.Type); err != nil {
+		var originalName string
+		if err := rows.Scan(&originalName); err != nil {
 			return nil, err
 		}
+
+		e.ID = uuid.New()
+		e.InstanceID = instanceID
+		e.Database = dbName
+		e.DBKey = originalName
+		e.Type = "USER"
+		e.Name = originalName
+
 		entities = append(entities, e)
 	}
 	return entities, nil
@@ -401,7 +464,7 @@ func (ms *MySQLScraper) FetchEntities(db *sql.DB, instanceID uuid.UUID, dbName s
 
 func (ms *MySQLScraper) FetchPrivileges(db *sql.DB, instanceID uuid.UUID, dbName string) ([]models.DBPrivilege, error) {
 	rows, err := db.Query(`
-		SELECT GRANTEE, TABLE_SCHEMA, TABLE_NAME, PRIVILEGE_TYPE 
+		SELECT GRANTEE, TABLE_SCHEMA, TABLE_NAME, PRIVILEGE_TYPE, IS_GRANTABLE
 		FROM information_schema.TABLE_PRIVILEGES 
 		WHERE TABLE_SCHEMA = ?`, dbName)
 	if err != nil {
@@ -412,12 +475,36 @@ func (ms *MySQLScraper) FetchPrivileges(db *sql.DB, instanceID uuid.UUID, dbName
 	var privs []models.DBPrivilege
 	for rows.Next() {
 		var p models.DBPrivilege
+		var isGrantable string
 		p.InstanceID = instanceID
 		p.Database = dbName
-		if err := rows.Scan(&p.Grantee, &p.Schema, &p.Table, &p.Privilege); err != nil {
+		if err := rows.Scan(&p.Grantee, &p.Schema, &p.Table, &p.Privilege, &isGrantable); err != nil {
 			return nil, err
 		}
+		p.IsGrantable = isGrantable == "YES"
 		privs = append(privs, p)
 	}
 	return privs, nil
+}
+
+func (ms *MySQLScraper) FetchRoleMemberships(db *sql.DB, instanceID uuid.UUID) ([]models.DBRoleMembership, error) {
+	// mysql.role_edges tracks role grants
+	rows, err := db.Query(`SELECT FROM_USER, TO_USER FROM mysql.role_edges`)
+	if err != nil {
+		// Table might not exist in older MySQL versions
+		return nil, nil
+	}
+	defer rows.Close()
+
+	var memberships []models.DBRoleMembership
+	for rows.Next() {
+		var m models.DBRoleMembership
+		m.ID = uuid.New()
+		m.InstanceID = instanceID
+		if err := rows.Scan(&m.RoleName, &m.MemberName); err != nil {
+			return nil, err
+		}
+		memberships = append(memberships, m)
+	}
+	return memberships, nil
 }

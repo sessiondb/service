@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
+	"sessiondb/internal/models"
+	"sessiondb/internal/repository"
 	"sessiondb/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -18,12 +21,15 @@ func NewInstanceHandler(service *service.InstanceService, syncService *service.S
 }
 
 type CreateInstanceRequest struct {
-	Name     string `json:"name" binding:"required"`
-	Host     string `json:"host" binding:"required"`
-	Port     int    `json:"port" binding:"required"`
-	Type     string `json:"type" binding:"required"`
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Name              string `json:"name" binding:"required"`
+	Host              string `json:"host" binding:"required"`
+	Port              int    `json:"port" binding:"required"`
+	Type              string `json:"type" binding:"required"`
+	Username          string `json:"username" binding:"required"`
+	Password          string `json:"password" binding:"required"`
+	IsProd            bool   `json:"isProd"`
+	MonitoringEnabled bool   `json:"monitoringEnabled"`
+	AlertEmail        string `json:"alertEmail"`
 }
 
 func (h *InstanceHandler) ListInstances(c *gin.Context) {
@@ -35,23 +41,27 @@ func (h *InstanceHandler) ListInstances(c *gin.Context) {
 
 	// Filter for regular users (remove credentials)
 	type UserView struct {
-		ID     uuid.UUID `json:"id"`
-		Name   string    `json:"name"`
-		Host   string    `json:"host"`
-		Port   int       `json:"port"`
-		Type   string    `json:"type"`
-		Status string    `json:"status"`
+		ID                uuid.UUID `json:"id"`
+		Name              string    `json:"name"`
+		Host              string    `json:"host"`
+		Port              int       `json:"port"`
+		Type              string    `json:"type"`
+		Status            string    `json:"status"`
+		IsProd            bool      `json:"isProd"`
+		MonitoringEnabled bool      `json:"monitoringEnabled"`
 	}
 
 	result := make([]UserView, len(instances))
 	for i, inst := range instances {
 		result[i] = UserView{
-			ID:     inst.ID,
-			Name:   inst.Name,
-			Host:   inst.Host,
-			Port:   inst.Port,
-			Type:   inst.Type,
-			Status: inst.Status,
+			ID:                inst.ID,
+			Name:              inst.Name,
+			Host:              inst.Host,
+			Port:              inst.Port,
+			Type:              inst.Type,
+			Status:            inst.Status,
+			IsProd:            inst.IsProd,
+			MonitoringEnabled: inst.MonitoringEnabled,
 		}
 	}
 
@@ -76,7 +86,7 @@ func (h *InstanceHandler) CreateInstance(c *gin.Context) {
 		return
 	}
 
-	instance, err := h.Service.CreateInstance(req.Name, req.Host, req.Port, req.Type, req.Username, req.Password)
+	instance, err := h.Service.CreateInstance(req.Name, req.Host, req.Port, req.Type, req.Username, req.Password, req.IsProd, req.MonitoringEnabled, req.AlertEmail)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -129,4 +139,28 @@ func (h *InstanceHandler) SyncInstance(c *gin.Context) {
 	go h.SyncService.SyncInstance(id, req.DatabaseName)
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Sync started"})
+}
+
+func (h *InstanceHandler) GetMonitoringLogs(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "10")
+	var limit int
+	fmt.Sscanf(limitStr, "%d", &limit)
+
+	// We need monitoring repo here, or add to InstanceService.
+	// For simplicity, I'll add it to InstanceService or just use repository.DB directly if I don't want to refactor again.
+	// Better to use repository.
+	var logs []models.DBMonitoringLog
+	if err := repository.DB.Where("instance_id = ?", id).Order("created_at desc").Limit(limit).Find(&logs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, logs)
 }

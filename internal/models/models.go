@@ -10,9 +10,9 @@ import (
 
 // Base model ensuring UUIDs are used
 type Base struct {
-	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID        uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
@@ -39,17 +39,18 @@ type User struct {
 	LastLogin        *time.Time `json:"lastLogin,omitempty"`
 	SSOID            string     `json:"ssoId,omitempty"`
 
-	Permissions      []Permission        `gorm:"foreignKey:UserID" json:"permissions"`
-	ApprovalRequests []ApprovalRequest   `gorm:"foreignKey:RequesterID" json:"approvalRequests,omitempty"`
-	SavedScripts     []SavedScript       `gorm:"foreignKey:UserID" json:"savedScripts"`
-	QueryTabs        []QueryTab          `gorm:"foreignKey:UserID" json:"queryTabs"`
-	DBCredentials    []DBUserCredential  `gorm:"foreignKey:UserID" json:"dbCredentials,omitempty"`
+	Permissions      []Permission       `gorm:"foreignKey:UserID" json:"permissions"`
+	ApprovalRequests []ApprovalRequest  `gorm:"foreignKey:RequesterID" json:"approvalRequests,omitempty"`
+	SavedScripts     []SavedScript      `gorm:"foreignKey:UserID" json:"savedScripts"`
+	QueryTabs        []QueryTab         `gorm:"foreignKey:UserID" json:"queryTabs"`
+	DBCredentials    []DBUserCredential `gorm:"foreignKey:UserID" json:"dbCredentials,omitempty"`
 }
 
 // Role model
 type Role struct {
 	Base
 	Name         string       `gorm:"uniqueIndex;not null" json:"name"`
+	DBKey        string       `gorm:"uniqueIndex;not null" json:"dbKey"`
 	Description  string       `json:"description,omitempty"`
 	IsSystemRole bool         `gorm:"default:false" json:"isSystemRole"`
 	Permissions  []Permission `gorm:"foreignKey:RoleID" json:"permissions"`
@@ -59,14 +60,14 @@ type Role struct {
 // Permission model
 type Permission struct {
 	Base
-	RoleID     *uuid.UUID `gorm:"index" json:"roleId,omitempty"`
-	UserID     *uuid.UUID `gorm:"index" json:"userId,omitempty"`
-	Database   string     `gorm:"not null" json:"database"` // '*' for all
-	Table      string     `gorm:"not null" json:"table"` // '*' for all
-	Privileges pq.StringArray   `gorm:"type:text[]" json:"privileges"` // Array of strings: READ, WRITE, DELETE, EXECUTE, ALL
-	Type       string     `gorm:"default:'permanent'" json:"type"` // permanent, temp, expiring
-	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
-	Expiry     *time.Time `gorm:"-" json:"expiry,omitempty"` // Alias for frontend compatibility
+	RoleID     *uuid.UUID     `gorm:"index" json:"roleId,omitempty"`
+	UserID     *uuid.UUID     `gorm:"index" json:"userId,omitempty"`
+	Database   string         `gorm:"not null" json:"database"`        // '*' for all
+	Table      string         `gorm:"not null" json:"table"`           // '*' for all
+	Privileges pq.StringArray `gorm:"type:text[]" json:"privileges"`   // Array of strings: READ, WRITE, DELETE, EXECUTE, ALL
+	Type       string         `gorm:"default:'permanent'" json:"type"` // permanent, temp, expiring
+	ExpiresAt  *time.Time     `json:"expiresAt,omitempty"`
+	Expiry     *time.Time     `gorm:"-" json:"expiry,omitempty"` // Alias for frontend compatibility
 }
 
 func (p *Permission) BeforeSave(tx *gorm.DB) error {
@@ -86,7 +87,7 @@ type ApprovalRequest struct {
 	Description          string     `json:"description"`
 	Justification        string     `json:"justification,omitempty"`
 	RequestedPermissions []byte     `gorm:"type:jsonb" json:"requestedPermissions,omitempty"` // Serialized permissions
-	Status               string     `gorm:"default:'pending'" json:"status"` // pending, approved, rejected, partially_approved
+	Status               string     `gorm:"default:'pending'" json:"status"`                  // pending, approved, rejected, partially_approved
 	ReviewedBy           *uuid.UUID `json:"reviewedBy,omitempty"`
 	ReviewedAt           *time.Time `json:"reviewedAt,omitempty"`
 	ApprovedPermissions  []byte     `gorm:"type:jsonb" json:"approvedPermissions,omitempty"`
@@ -138,25 +139,31 @@ type DBUserCredential struct {
 	User       User       `gorm:"foreignKey:UserID" json:"user,omitempty"`
 	InstanceID uuid.UUID  `gorm:"index;not null" json:"instanceId"`
 	Instance   DBInstance `gorm:"foreignKey:InstanceID" json:"instance,omitempty"`
-	
-	DBUsername string     `gorm:"not null;index" json:"dbUsername"` // Actual DB username (e.g., sdb_dev_john_perm)
-	DBPassword string     `gorm:"not null" json:"-"`                // AES-256 encrypted password
-	
-	ExpiresAt  *time.Time `gorm:"index" json:"expiresAt,omitempty"` // For temporary users
-	Status     string     `gorm:"default:'active';index" json:"status"` // active, expired, revoked
+
+	DBUsername string `gorm:"not null;index" json:"dbUsername"` // Actual DB username (e.g., sdb_dev_john_perm)
+	DBPassword string `gorm:"not null" json:"-"`                // AES-256 encrypted password
+	Role       string `json:"role"`                             // e.g., read_only, read_write, admin
+
+	ExpiresAt *time.Time `gorm:"index" json:"expiresAt,omitempty"`     // For temporary users
+	Status    string     `gorm:"default:'active';index" json:"status"` // active, expired, revoked
 }
 
 // DBInstance model
 type DBInstance struct {
 	Base
-	Name        string `gorm:"not null" json:"name"`
-	Host        string `gorm:"not null" json:"host"`
-	Port        int    `gorm:"not null" json:"port"`
-	Type     string `gorm:"not null" json:"type"` // e.g., postgres, mysql
-	Username string `gorm:"not null" json:"username,omitempty"`
-	Password     string `gorm:"not null" json:"-"` // Never export password in general JSON
-	Status       string `gorm:"default:'offline'" json:"status"`
-	LastSync     *time.Time `json:"lastSync"`
+	Name     string     `gorm:"not null" json:"name"`
+	Host     string     `gorm:"not null" json:"host"`
+	Port     int        `gorm:"not null" json:"port"`
+	Type     string     `gorm:"not null" json:"type"` // e.g., postgres, mysql
+	Username string     `gorm:"not null" json:"username,omitempty"`
+	Password string     `gorm:"not null" json:"-"` // Never export password in general JSON
+	Status   string     `gorm:"default:'offline'" json:"status"`
+	LastSync *time.Time `json:"lastSync"`
+
+	// Monitoring
+	IsProd            bool   `gorm:"default:false" json:"isProd"`
+	MonitoringEnabled bool   `gorm:"default:false" json:"monitoringEnabled"`
+	AlertEmail        string `json:"alertEmail,omitempty"`
 
 	// Relationships
 	Tables     []DBTable     `gorm:"foreignKey:InstanceID" json:"-"`
@@ -164,14 +171,25 @@ type DBInstance struct {
 	Privileges []DBPrivilege `gorm:"foreignKey:InstanceID" json:"-"`
 }
 
+// DBMonitoringLog model
+type DBMonitoringLog struct {
+	Base
+	InstanceID uuid.UUID  `gorm:"index;not null" json:"instanceId"`
+	Instance   DBInstance `gorm:"foreignKey:InstanceID" json:"-"`
+	Status     string     `json:"status"` // online, offline
+	Uptime     int64      `json:"uptime"`
+	Metrics    []byte     `gorm:"type:jsonb" json:"metrics"` // Storing other performance metrics as JSON
+	Message    string     `json:"message"`
+}
+
 // DBTable model
 type DBTable struct {
 	Base
-	InstanceID uuid.UUID `gorm:"index" json:"instanceId"`
-	Database   string    `json:"database"`
-	Schema     string    `json:"schema"`
-	Name       string    `json:"name"`
-	Type       string    `json:"type"` // BASE TABLE, VIEW
+	InstanceID uuid.UUID  `gorm:"index" json:"instanceId"`
+	Database   string     `json:"database"`
+	Schema     string     `json:"schema"`
+	Name       string     `json:"name"`
+	Type       string     `json:"type"` // BASE TABLE, VIEW
 	Columns    []DBColumn `gorm:"foreignKey:TableID" json:"columns"`
 }
 
@@ -192,18 +210,28 @@ type DBEntity struct {
 	InstanceID uuid.UUID `gorm:"index" json:"instanceId"`
 	Database   string    `json:"database"`
 	Name       string    `json:"name"`
-	Type       string    `json:"type"` // ROLE, USER
+	DBKey      string    `json:"dbKey"` // Original name from DB (e.g. snake_case)
+	Type       string    `json:"type"`  // ROLE, USER
 }
 
 // DBPrivilege model
 type DBPrivilege struct {
 	Base
+	InstanceID  uuid.UUID `gorm:"index" json:"instanceId"`
+	Database    string    `json:"database"`
+	Grantee     string    `json:"grantee"` // Name of user/role in target DB
+	Schema      string    `json:"schema"`
+	Table       string    `json:"table"`
+	Privilege   string    `json:"privilege"` // SELECT, INSERT, etc.
+	IsGrantable bool      `json:"isGrantable"`
+}
+
+// DBRoleMembership model - tracks role hierarchy in target DBs
+type DBRoleMembership struct {
+	Base
 	InstanceID uuid.UUID `gorm:"index" json:"instanceId"`
-	Database   string    `json:"database"`
-	Grantee    string    `json:"grantee"` // Name of user/role in target DB
-	Schema     string    `json:"schema"`
-	Table      string    `json:"table"`
-	Privilege  string    `json:"privilege"` // SELECT, INSERT, etc.
+	RoleName   string    `json:"roleName"`   // The role being granted
+	MemberName string    `json:"memberName"` // The user/role receiving the grant
 }
 
 // BeforeCreate hook to generate UUIDs if not present

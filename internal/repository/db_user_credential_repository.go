@@ -75,6 +75,13 @@ func (r *DBUserCredentialRepository) Delete(id uuid.UUID) error {
 	return r.DB.Delete(&models.DBUserCredential{}, id).Error
 }
 
+// UpdateRole updates the role of a credential
+func (r *DBUserCredentialRepository) UpdateRole(id uuid.UUID, role string) error {
+	return r.DB.Model(&models.DBUserCredential{}).
+		Where("id = ?", id).
+		Update("role", role).Error
+}
+
 // FindAll finds all credentials (admin use)
 func (r *DBUserCredentialRepository) FindAll() ([]models.DBUserCredential, error) {
 	var creds []models.DBUserCredential

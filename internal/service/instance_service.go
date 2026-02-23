@@ -16,15 +16,18 @@ func NewInstanceService(repo *repository.InstanceRepository) *InstanceService {
 	return &InstanceService{Repo: repo}
 }
 
-func (s *InstanceService) CreateInstance(name, host string, port int, instanceType, username, password string) (*models.DBInstance, error) {
+func (s *InstanceService) CreateInstance(name, host string, port int, instanceType, username, password string, isProd bool, monitoringEnabled bool, alertEmail string) (*models.DBInstance, error) {
 	instance := &models.DBInstance{
-		Name:     name,
-		Host:     host,
-		Port:     port,
-		Type:     instanceType,
-		Username: username,
-		Password: password, // In production, encrypt this
-		Status:   "offline",
+		Name:              name,
+		Host:              host,
+		Port:              port,
+		Type:              instanceType,
+		Username:          username,
+		Password:          password, // In production, encrypt this
+		Status:            "offline",
+		IsProd:            isProd,
+		MonitoringEnabled: monitoringEnabled,
+		AlertEmail:        alertEmail,
 	}
 	if err := s.Repo.Create(instance); err != nil {
 		return nil, err
@@ -63,6 +66,12 @@ func (s *InstanceService) UpdateInstance(id uuid.UUID, updates map[string]interf
 			instance.Password = v.(string) // Encrypt in prod
 		case "status":
 			instance.Status = v.(string)
+		case "isProd":
+			instance.IsProd = v.(bool)
+		case "monitoringEnabled":
+			instance.MonitoringEnabled = v.(bool)
+		case "alertEmail":
+			instance.AlertEmail = v.(string)
 		}
 	}
 
@@ -82,6 +91,6 @@ func (s *InstanceService) TriggerSync(id uuid.UUID) error {
 	now := time.Now()
 	instance.LastSync = &now
 	instance.Status = "online"
-	
+
 	return s.Repo.Update(instance)
 }

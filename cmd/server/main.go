@@ -32,6 +32,7 @@ func main() {
 	instanceRepo := repository.NewInstanceRepository(repository.DB)
 	metaRepo := repository.NewMetadataRepository(repository.DB)
 	dbUserCredRepo := repository.NewDBUserCredentialRepository(repository.DB)
+	monitorRepo := repository.NewMonitoringRepository(repository.DB)
 
 	// Initialize Services
 	auditService := service.NewAuditService(auditRepo)
@@ -49,10 +50,13 @@ func main() {
 	metaService := service.NewMetadataService(metaRepo)
 	hub := service.NewNotificationHub()
 	syncWorker := service.NewSyncWorker(syncService, hub)
+	monitoringService := service.NewMonitoringService(instanceRepo, monitorRepo, hub)
+	monitoringWorker := service.NewMonitoringWorker(monitoringService)
 
 	// Start Background Workers
 	go hub.Run()
 	syncWorker.Start()
+	monitoringWorker.Start()
 
 	// Initialize Handlers
 	authHandler := handlers.NewAuthHandler(authService)
@@ -64,10 +68,11 @@ func main() {
 	configHandler := handlers.NewConfigHandler(configService)
 	instanceHandler := handlers.NewInstanceHandler(instanceService, syncService)
 	metaHandler := handlers.NewMetadataHandler(metaService)
+	dbUserHandler := handlers.NewDBUserHandler(provisioningService, metaRepo, instanceRepo)
 
 	// Setup Router
 	r := gin.Default()
-	
+
 	// CORS Middleware (Important for frontend dev)
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -130,6 +135,13 @@ func main() {
 				users.DELETE("/:id", userHandler.DeleteUser)
 			}
 
+			// DB User Management
+			dbUsers := protected.Group("/db-users")
+			{
+				dbUsers.GET("", dbUserHandler.GetDBUsers)
+				dbUsers.PUT("/:id", dbUserHandler.UpdateDBUserRole)
+			}
+
 			requests := protected.Group("/requests")
 			{
 				requests.GET("", approvalHandler.GetRequests)
@@ -138,7 +150,7 @@ func main() {
 				requests.PUT("/:id", approvalHandler.UpdateRequestStatus)
 			}
 
-			// Keep /approvals for backward compatibility if needed, or remove. 
+			// Keep /approvals for backward compatibility if needed, or remove.
 			// Removing as per "Refactor".
 
 			query := protected.Group("/query")
@@ -154,7 +166,7 @@ func main() {
 				logs.GET("", auditHandler.GetLogs)
 				logs.POST("", auditHandler.CreateLog)
 			}
-			
+
 			// User Context (Persisted State)
 			me := protected.Group("/me")
 			{
@@ -167,6 +179,7 @@ func main() {
 			instances := protected.Group("/instances")
 			{
 				instances.GET("", instanceHandler.ListInstances)
+				instances.GET("/:id/monitoring", instanceHandler.GetMonitoringLogs)
 				instances.GET("/:id/databases", metaHandler.ListDatabases)
 				instances.GET("/:id/databases/:dbName/tables", metaHandler.ListTables)
 				instances.GET("/:id/schema", metaHandler.GetInstanceSchema)

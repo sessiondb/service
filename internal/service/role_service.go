@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sessiondb/internal/models"
 	"sessiondb/internal/repository"
+	"sessiondb/internal/utils"
 
 	"github.com/google/uuid"
 )
@@ -23,6 +24,7 @@ func NewRoleService(roleRepo *repository.RoleRepository, userRepo *repository.Us
 func (s *RoleService) CreateRole(name, description string, permissions []models.Permission) (*models.Role, error) {
 	role := &models.Role{
 		Name:        name,
+		DBKey:       utils.ToSnakeCase(name),
 		Description: description,
 		Permissions: permissions,
 	}
@@ -70,8 +72,9 @@ func (s *RoleService) UpdateRole(id uuid.UUID, name, description string) (*model
 	}
 
 	role.Name = name
+	role.DBKey = utils.ToSnakeCase(name)
 	role.Description = description
-	
+
 	if err := s.RoleRepo.Update(role); err != nil {
 		return nil, err
 	}
