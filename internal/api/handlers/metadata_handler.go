@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"sessiondb/internal/apierrors"
 	"sessiondb/internal/models"
@@ -143,10 +144,14 @@ func (h *MetadataHandler) GetInstanceSchema(c *gin.Context) {
 
 	// Build a privilege map: "schema.table" → set of privilege types
 	dbUsername := cred.DBUsername
+
+	log.Printf("DEBUG Schema Filter: Instance=%s, User=%s, dbUsername=%s", id, userID, dbUsername)
+
 	privMap := make(map[string]map[string]bool)
 
 	// Direct privileges
 	directPrivs, _ := h.MetaRepo.FindPrivilegesByGrantee(id, dbUsername)
+	log.Printf("DEBUG Schema Filter: DirectPrivs found = %d", len(directPrivs))
 	for _, p := range directPrivs {
 		key := fmt.Sprintf("%s.%s", p.Schema, p.Table)
 		if privMap[key] == nil {
@@ -157,8 +162,10 @@ func (h *MetadataHandler) GetInstanceSchema(c *gin.Context) {
 
 	// Role-inherited privileges
 	roles, _ := h.MetaRepo.FindRoleMembershipsByMember(id, dbUsername)
+	log.Printf("DEBUG Schema Filter: Roles inherited = %v", roles)
 	for _, roleName := range roles {
 		rolePrivs, _ := h.MetaRepo.FindPrivilegesByGrantee(id, roleName)
+		log.Printf("DEBUG Schema Filter: Role %s privs found = %d", roleName, len(rolePrivs))
 		for _, p := range rolePrivs {
 			key := fmt.Sprintf("%s.%s", p.Schema, p.Table)
 			if privMap[key] == nil {
@@ -168,6 +175,8 @@ func (h *MetadataHandler) GetInstanceSchema(c *gin.Context) {
 		}
 	}
 
+	log.Printf("DEBUG Schema Filter: Final privMap keys = %d", len(privMap))
+
 	// Filter each database's tables: only include those with at least one privilege
 	enriched := InstanceSchemaWithPrivileges{
 		InstanceID: schema.InstanceID,
@@ -175,11 +184,31 @@ func (h *MetadataHandler) GetInstanceSchema(c *gin.Context) {
 
 	for _, db := range schema.Databases {
 		var filteredTables []TableWithPrivileges
+
+		// Check for global or DB-level wildcards
+		globalWildcardPrivs := privMap["*.*"]
+		dbWildcardPrivs := privMap[fmt.Sprintf("%s.*", db.Database)]
+
 		for _, t := range db.Tables {
 			key := fmt.Sprintf("%s.%s", t.Schema, t.Name)
-			if privs, ok := privMap[key]; ok && len(privs) > 0 {
-				privList := make([]string, 0, len(privs))
+
+			// Combine privileges from direct, DB-wildcard, and Global-wildcard
+			combinedPrivs := make(map[string]bool)
+			if privs, ok := privMap[key]; ok {
 				for p := range privs {
+					combinedPrivs[p] = true
+				}
+			}
+			for p := range dbWildcardPrivs {
+				combinedPrivs[p] = true
+			}
+			for p := range globalWildcardPrivs {
+				combinedPrivs[p] = true
+			}
+
+			if len(combinedPrivs) > 0 {
+				privList := make([]string, 0, len(combinedPrivs))
+				for p := range combinedPrivs {
 					privList = append(privList, p)
 				}
 				filteredTables = append(filteredTables, TableWithPrivileges{

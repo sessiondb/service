@@ -309,10 +309,20 @@ func (ps *PostgresScraper) FetchEntities(db *sql.DB, instanceID uuid.UUID, dbNam
 }
 
 func (ps *PostgresScraper) FetchPrivileges(db *sql.DB, instanceID uuid.UUID, dbName string) ([]models.DBPrivilege, error) {
-	rows, err := db.Query(`
+	query := `
 		SELECT grantee, table_schema, table_name, privilege_type, is_grantable
-		FROM information_schema.table_privileges 
-		WHERE table_schema NOT IN ('pg_catalog', 'information_schema')`)
+		FROM information_schema.table_privileges
+		WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+		UNION ALL
+		SELECT grantee, object_schema AS table_schema, '*' AS table_name, privilege_type, is_grantable
+		FROM information_schema.role_usage_grants
+		WHERE object_schema NOT IN ('pg_catalog', 'information_schema')
+		UNION ALL
+		SELECT rolname AS grantee, '*' AS table_schema, '*' AS table_name, 'ALL' AS privilege_type, 'YES' AS is_grantable
+		FROM pg_roles
+		WHERE rolsuper = true
+	`
+	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -486,10 +496,19 @@ func (ms *MySQLScraper) FetchEntities(db *sql.DB, instanceID uuid.UUID, dbName s
 }
 
 func (ms *MySQLScraper) FetchPrivileges(db *sql.DB, instanceID uuid.UUID, dbName string) ([]models.DBPrivilege, error) {
-	rows, err := db.Query(`
+	query := `
 		SELECT GRANTEE, TABLE_SCHEMA, TABLE_NAME, PRIVILEGE_TYPE, IS_GRANTABLE
 		FROM information_schema.TABLE_PRIVILEGES 
-		WHERE TABLE_SCHEMA = ?`, dbName)
+		WHERE TABLE_SCHEMA = ?
+		UNION ALL
+		SELECT GRANTEE, TABLE_SCHEMA, '*' AS TABLE_NAME, PRIVILEGE_TYPE, IS_GRANTABLE
+		FROM information_schema.SCHEMA_PRIVILEGES
+		WHERE TABLE_SCHEMA = ?
+		UNION ALL
+		SELECT GRANTEE, '*' AS TABLE_SCHEMA, '*' AS TABLE_NAME, PRIVILEGE_TYPE, IS_GRANTABLE
+		FROM information_schema.USER_PRIVILEGES
+	`
+	rows, err := db.Query(query, dbName, dbName)
 	if err != nil {
 		return nil, err
 	}
