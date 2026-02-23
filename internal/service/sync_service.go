@@ -435,27 +435,50 @@ func (ms *MySQLScraper) FetchColumns(db *sql.DB, tableID uuid.UUID, schema, tabl
 }
 
 func (ms *MySQLScraper) FetchEntities(db *sql.DB, instanceID uuid.UUID, dbName string) ([]models.DBEntity, error) {
+	// First, discover which users are actually roles by checking role_edges.
+	// In MySQL 8.0+, roles are entries in mysql.user that appear as FROM_USER in role_edges.
+	roleSet := make(map[string]bool)
+	roleRows, err := db.Query(`SELECT DISTINCT FROM_USER FROM mysql.role_edges`)
+	if err == nil {
+		defer roleRows.Close()
+		for roleRows.Next() {
+			var roleName string
+			if err := roleRows.Scan(&roleName); err == nil {
+				roleSet[roleName] = true
+			}
+		}
+	}
+	// role_edges may not exist on older MySQL — that's fine, roleSet stays empty.
+
 	// MySQL users are global, not per-DB.
-	rows, err := db.Query(`SELECT user FROM mysql.user`)
+	rows, err := db.Query(`SELECT user, host FROM mysql.user`)
 	if err != nil {
-		return nil, nil
+		return nil, nil // Fallback for limited permission users
 	}
 	defer rows.Close()
 
 	var entities []models.DBEntity
 	for rows.Next() {
 		var e models.DBEntity
-		var originalName string
-		if err := rows.Scan(&originalName); err != nil {
+		var user, host string
+		if err := rows.Scan(&user, &host); err != nil {
 			return nil, err
 		}
+
+		fullGrantee := fmt.Sprintf("'%s'@'%s'", user, host)
 
 		e.ID = uuid.New()
 		e.InstanceID = instanceID
 		e.Database = dbName
-		e.DBKey = originalName
-		e.Type = "USER"
-		e.Name = originalName
+		e.DBKey = fullGrantee
+
+		if roleSet[user] {
+			e.Type = "ROLE"
+			e.Name = utils.ToPascalCase(user)
+		} else {
+			e.Type = "USER"
+			e.Name = fullGrantee
+		}
 
 		entities = append(entities, e)
 	}
@@ -489,7 +512,7 @@ func (ms *MySQLScraper) FetchPrivileges(db *sql.DB, instanceID uuid.UUID, dbName
 
 func (ms *MySQLScraper) FetchRoleMemberships(db *sql.DB, instanceID uuid.UUID) ([]models.DBRoleMembership, error) {
 	// mysql.role_edges tracks role grants
-	rows, err := db.Query(`SELECT FROM_USER, TO_USER FROM mysql.role_edges`)
+	rows, err := db.Query(`SELECT FROM_USER, FROM_HOST, TO_USER, TO_HOST FROM mysql.role_edges`)
 	if err != nil {
 		// Table might not exist in older MySQL versions
 		return nil, nil
@@ -499,11 +522,16 @@ func (ms *MySQLScraper) FetchRoleMemberships(db *sql.DB, instanceID uuid.UUID) (
 	var memberships []models.DBRoleMembership
 	for rows.Next() {
 		var m models.DBRoleMembership
-		m.ID = uuid.New()
-		m.InstanceID = instanceID
-		if err := rows.Scan(&m.RoleName, &m.MemberName); err != nil {
+		var fromUser, fromHost, toUser, toHost string
+		if err := rows.Scan(&fromUser, &fromHost, &toUser, &toHost); err != nil {
 			return nil, err
 		}
+
+		m.ID = uuid.New()
+		m.InstanceID = instanceID
+		m.RoleName = fmt.Sprintf("'%s'@'%s'", fromUser, fromHost)
+		m.MemberName = fmt.Sprintf("'%s'@'%s'", toUser, toHost)
+
 		memberships = append(memberships, m)
 	}
 	return memberships, nil

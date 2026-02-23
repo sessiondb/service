@@ -20,8 +20,8 @@ func NewUserHandler(service *service.UserService, roleService *service.RoleServi
 
 type CreateUserRequest struct {
 	Name           string              `json:"name" binding:"required"`
-	Email          string              `json:"email"` // Made optional for frontend compatibility
-	Password       string              `json:"password"` // Made optional, will generate default if missing
+	Email          string              `json:"email"`                   // Made optional for frontend compatibility
+	Password       string              `json:"password"`                // Made optional, will generate default if missing
 	Role           string              `json:"role" binding:"required"` // Role name
 	Status         string              `json:"status"`
 	IsSessionBased bool                `json:"isSessionBased"`
@@ -82,9 +82,9 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 		RoleID:         role.ID,
 		Status:         req.Status,
 		IsSessionBased: req.IsSessionBased,
-		Permissions:    req.Permissions, 
+		Permissions:    req.Permissions,
 	}
-	
+
 	createdUser, err := h.Service.Create(user, req.Password)
 	if err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -156,18 +156,22 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	}
 
 	// Update fields if provided
-	if req.Name != nil { user.Name = *req.Name }
-	if req.Status != nil { user.Status = *req.Status }
+	if req.Name != nil {
+		user.Name = *req.Name
+	}
+	if req.Status != nil {
+		user.Status = *req.Status
+	}
 	if req.Role != nil {
 		role, err := h.RoleService.GetRoleByName(*req.Role)
 		if err == nil {
 			user.RoleID = role.ID
 		}
 	}
-	if req.IsSessionBased != nil { 
-		user.IsSessionBased = *req.IsSessionBased 
+	if req.IsSessionBased != nil {
+		user.IsSessionBased = *req.IsSessionBased
 	}
-	
+
 	if req.Permissions != nil {
 		user.Permissions = req.Permissions
 	}

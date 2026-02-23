@@ -3,21 +3,25 @@ package service
 import (
 	"database/sql"
 	"fmt"
+	"sessiondb/internal/apierrors"
 	"sessiondb/internal/config"
 	"sessiondb/internal/models"
 	"sessiondb/internal/repository"
+	"sessiondb/internal/utils"
+	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	_ "github.com/go-sql-driver/mysql" // MySQL driver
-	_ "github.com/lib/pq"              // Postgres driver
+	"github.com/google/uuid"
+	_ "github.com/lib/pq" // Postgres driver
 )
 
 type QueryService struct {
-	QueryRepo    *repository.QueryRepository
-	InstanceRepo *repository.InstanceRepository
-	AuditService *AuditService
-	Config       *config.Config
+	QueryRepo      *repository.QueryRepository
+	InstanceRepo   *repository.InstanceRepository
+	DBUserCredRepo *repository.DBUserCredentialRepository
+	AuditService   *AuditService
+	Config         *config.Config
 }
 
 func NewQueryService(queryRepo *repository.QueryRepository, cfg *config.Config) *QueryService {
@@ -37,11 +41,37 @@ func (s *QueryService) SetAuditService(svc *AuditService) {
 	s.AuditService = svc
 }
 
+// SetDBUserCredRepo allows injection of DBUserCredentialRepository after construction
+func (s *QueryService) SetDBUserCredRepo(repo *repository.DBUserCredentialRepository) {
+	s.DBUserCredRepo = repo
+}
+
 func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, query, ipAddress, userAgent string) (interface{}, error) {
 	// Lookup instance
 	instance, err := s.InstanceRepo.FindByID(instanceID)
 	if err != nil {
 		return nil, fmt.Errorf("instance not found: %w", err)
+	}
+
+	// Resolve credentials: try user-level creds first, fall back to admin
+	dbUser := instance.Username
+	dbPass := instance.Password
+	usingUserCreds := false
+
+	if s.DBUserCredRepo != nil {
+		cred, credErr := s.DBUserCredRepo.FindByUserAndInstance(userID, instanceID)
+		if credErr != nil || cred == nil {
+			// No user credential found — return specific error code
+			return nil, apierrors.ErrUserCredsReq
+		}
+		// Decrypt the stored password
+		plainPass, decErr := utils.DecryptPassword(cred.DBPassword)
+		if decErr != nil {
+			return nil, apierrors.ErrUserCredsInvalid
+		}
+		dbUser = cred.DBUsername
+		dbPass = plainPass
+		usingUserCreds = true
 	}
 
 	// Build DSN based on instance type
@@ -51,20 +81,31 @@ func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, quer
 	case "postgres":
 		driverName = "postgres"
 		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s sslmode=disable",
-			instance.Host, instance.Port, instance.Username, instance.Password)
+			instance.Host, instance.Port, dbUser, dbPass)
 	case "mysql":
 		driverName = "mysql"
 		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/",
-			instance.Username, instance.Password, instance.Host, instance.Port)
+			dbUser, dbPass, instance.Host, instance.Port)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", instance.Type)
 	}
 
 	db, err := sql.Open(driverName, dsn)
 	if err != nil {
+		if usingUserCreds {
+			return nil, apierrors.ErrUserCredsInvalid
+		}
 		return nil, fmt.Errorf("failed to connect: %w", err)
 	}
 	defer db.Close()
+
+	// Verify connection — catches auth failures
+	if err := db.Ping(); err != nil {
+		if usingUserCreds && isAuthError(err) {
+			return nil, apierrors.ErrUserCredsInvalid
+		}
+		return nil, fmt.Errorf("failed to connect: %w", err)
+	}
 
 	start := time.Now()
 	rows, err := db.Query(query)
@@ -148,4 +189,13 @@ func (s *QueryService) SaveScript(userID uuid.UUID, name, query string, isPublic
 
 func (s *QueryService) GetScripts(userID uuid.UUID) ([]models.SavedScript, error) {
 	return s.QueryRepo.GetScripts(userID)
+}
+
+// isAuthError checks if a database error is an authentication/access-denied failure.
+func isAuthError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "access denied") ||
+		strings.Contains(msg, "password authentication failed") ||
+		strings.Contains(msg, "authentication failed") ||
+		strings.Contains(msg, "invalid password")
 }

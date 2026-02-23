@@ -43,8 +43,9 @@ func main() {
 	configService := service.NewConfigService()
 	approvalService := service.NewApprovalService(approvalRepo)
 	queryService := service.NewQueryService(queryRepo, cfg)
-	queryService.SetInstanceRepo(instanceRepo) // Inject instance repo for query execution
-	queryService.SetAuditService(auditService) // Inject audit service for history logging
+	queryService.SetInstanceRepo(instanceRepo)     // Inject instance repo for query execution
+	queryService.SetAuditService(auditService)     // Inject audit service for history logging
+	queryService.SetDBUserCredRepo(dbUserCredRepo) // Inject DB user cred repo for user-level auth
 	instanceService := service.NewInstanceService(instanceRepo)
 	syncService := service.NewSyncService(instanceRepo, metaRepo)
 	metaService := service.NewMetadataService(metaRepo)
@@ -67,8 +68,9 @@ func main() {
 	auditHandler := handlers.NewAuditHandler(auditService, userRepo)
 	configHandler := handlers.NewConfigHandler(configService)
 	instanceHandler := handlers.NewInstanceHandler(instanceService, syncService)
-	metaHandler := handlers.NewMetadataHandler(metaService)
+	metaHandler := handlers.NewMetadataHandler(metaService, metaRepo, dbUserCredRepo)
 	dbUserHandler := handlers.NewDBUserHandler(provisioningService, metaRepo, instanceRepo)
+	dbRoleHandler := handlers.NewDBRoleHandler(metaRepo, instanceRepo)
 
 	// Setup Router
 	r := gin.Default()
@@ -139,8 +141,18 @@ func main() {
 			dbUsers := protected.Group("/db-users")
 			{
 				dbUsers.GET("", dbUserHandler.GetDBUsers)
-				dbUsers.PUT("/:id", dbUserHandler.UpdateDBUserRole)
+				dbUsers.PUT("/:id", dbUserHandler.UpdateDBUserRole) // managed cred ID
+				dbUsers.PUT("/:id/link", dbUserHandler.LinkDBUser)  // db entity ID
 			}
+
+			// DB Credentials Management
+			dbCredentials := protected.Group("/db-credentials")
+			{
+				dbCredentials.POST("/verify", dbUserHandler.VerifyCredentials)
+			}
+
+			// DB Role Management
+			protected.GET("/db-roles", dbRoleHandler.GetDBRoles)
 
 			requests := protected.Group("/requests")
 			{

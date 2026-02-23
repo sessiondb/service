@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
+	"sessiondb/internal/apierrors"
 	"sessiondb/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -30,15 +32,15 @@ type SaveScriptRequest struct {
 func (h *QueryHandler) ExecuteQuery(c *gin.Context) {
 	var req ExecuteQueryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		apierrors.Respond(c, apierrors.NewAppError(http.StatusBadRequest, apierrors.CodeInvalidRequest, err.Error()))
 		return
 	}
 
 	userID := c.MustGet("userID").(uuid.UUID)
-	
+
 	instanceID, err := uuid.Parse(req.InstanceID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid instance ID"})
+		apierrors.Respond(c, apierrors.NewAppError(http.StatusBadRequest, apierrors.CodeInvalidRequest, "Invalid instance ID"))
 		return
 	}
 
@@ -47,7 +49,14 @@ func (h *QueryHandler) ExecuteQuery(c *gin.Context) {
 
 	result, err := h.Service.ExecuteQuery(userID, instanceID, req.Query, ipAddress, userAgent)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		// Use the sentinel AppError if it's one of ours, otherwise wrap it
+		var appErr *apierrors.AppError
+		if errors.As(err, &appErr) {
+			apierrors.Respond(c, appErr)
+		} else {
+			// e.g. some generic SQL error
+			apierrors.Respond(c, apierrors.NewAppError(http.StatusBadRequest, apierrors.CodeInvalidRequest, err.Error()))
+		}
 		return
 	}
 

@@ -153,3 +153,12 @@ func (r *MetadataRepository) FindEntitiesByInstance(instanceID uuid.UUID, entity
 	err := q.Find(&entities).Error
 	return entities, err
 }
+
+// CountMembersByRole counts how many members have a given role in a specific instance.
+func (r *MetadataRepository) CountMembersByRole(instanceID uuid.UUID, roleName string) (int64, error) {
+	var count int64
+	err := r.DB.Model(&models.DBRoleMembership{}).
+		Where("instance_id = ? AND role_name = ?", instanceID, roleName).
+		Count(&count).Error
+	return count, err
+}
