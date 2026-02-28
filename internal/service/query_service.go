@@ -84,8 +84,13 @@ func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, quer
 			instance.Host, instance.Port, dbUser, dbPass)
 	case "mysql":
 		driverName = "mysql"
+		cleanUser := dbUser
+		if strings.Contains(cleanUser, "@") {
+			cleanUser = strings.Split(cleanUser, "@")[0]
+			cleanUser = strings.Trim(cleanUser, "'\"")
+		}
 		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/",
-			dbUser, dbPass, instance.Host, instance.Port)
+			cleanUser, dbPass, instance.Host, instance.Port)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", instance.Type)
 	}

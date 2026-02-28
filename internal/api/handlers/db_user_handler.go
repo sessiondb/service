@@ -9,6 +9,7 @@ import (
 	"sessiondb/internal/repository"
 	"sessiondb/internal/service"
 	"sessiondb/internal/utils"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
@@ -333,8 +334,13 @@ func (h *DBUserHandler) VerifyCredentials(c *gin.Context) {
 		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s sslmode=disable",
 			instance.Host, instance.Port, cred.DBUsername, req.DBPassword)
 	} else if instance.Type == "mysql" {
+		cleanUser := cred.DBUsername
+		if strings.Contains(cleanUser, "@") {
+			cleanUser = strings.Split(cleanUser, "@")[0]
+			cleanUser = strings.Trim(cleanUser, "'\"")
+		}
 		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/",
-			cred.DBUsername, req.DBPassword, instance.Host, instance.Port)
+			cleanUser, req.DBPassword, instance.Host, instance.Port)
 	} else {
 		apierrors.Respond(c, apierrors.NewAppError(http.StatusBadRequest, apierrors.CodeInvalidRequest, "Unsupported database engine"))
 		return

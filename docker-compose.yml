@@ -12,6 +12,7 @@ services:
       - DB_NAME=sessiondb
       - DB_PORT=5432
       - REDIS_ADDR=redis:6379
+      - DB_CREDENTIAL_ENCRYPTION_KEY=12345678901234567890123456789012
     depends_on:
       postgres:
         condition: service_healthy
