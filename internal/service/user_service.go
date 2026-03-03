@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Sai Mouli Bandari. Licensed under Business Source License 1.1.
+
 package service
 
 import (
@@ -10,9 +12,9 @@ import (
 )
 
 type UserService struct {
-	UserRepo           *repository.UserRepository
+	UserRepo            *repository.UserRepository
 	ProvisioningService *DBUserProvisioningService
-	InstanceRepo       *repository.InstanceRepository
+	InstanceRepo        *repository.InstanceRepository
 }
 
 func NewUserService(
@@ -21,9 +23,9 @@ func NewUserService(
 	instanceRepo *repository.InstanceRepository,
 ) *UserService {
 	return &UserService{
-		UserRepo:           userRepo,
+		UserRepo:            userRepo,
 		ProvisioningService: provisioningService,
-		InstanceRepo:       instanceRepo,
+		InstanceRepo:        instanceRepo,
 	}
 }
 

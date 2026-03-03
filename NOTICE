@@ -1,0 +1,34 @@
+SessionDB NOTICE
+
+SessionDB Community Edition is licensed under the Business Source License (BSL) 1.1.
+
+# Additional Use Grant & Competing Use Restrictions
+
+You are granted permission to use the SessionDB Community Edition source code for:
+- Non-production use
+- Personal projects
+- Internal testing and evaluation
+
+You are explicitly FORBIDDEN from using this source code to provide a commercial service that competes with SessionDB's primary offerings, including but not limited to:
+- A commercial "Database-as-a-Service" (DBaaS)
+- A commercial "Managed Query Environment"
+- A commercial "Data Observability Platform"
+
+# Feature Clarification (Open Core vs. Proprietary)
+
+While the Core logic for bill splitting, database entity management, and basic RBAC enforcement provided in this repository is source-available under the BSL 1.1, the high-value observability and enterprise features remain proprietary and are NOT included in the Community Edition.
+
+The following "Pro" features (and any source code developed to support them) are strictly proprietary and restricted:
+- Query Insights & Execution Analytics
+- DB Metrics & Performance Tracking
+- TTL-based Table Access & Expiring Grants
+- Auto Credentials Expiry & Rotation
+- Advanced DB Alters & Schema Migration Tools
+- Advanced Approval Workflows
+
+# Commercial Licensing
+
+If your intended use of the Licensed Work exceeds the Additional Use Grant (e.g., you wish to use the software in a production environment as a SaaS provider) or you wish to bypass the BSL restrictions before the Change Date (January 1, 2030), you must purchase a commercial license.
+
+For commercial licensing inquiries, please contact:
+[Insert Your Contact Email Here]

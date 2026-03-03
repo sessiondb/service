@@ -1,0 +1,59 @@
+Business Source License 1.1
+
+License text copyright (c) 2017 MariaDB Corporation Ab, All Rights Reserved.
+"Business Source License" is a trademark of MariaDB Corporation Ab.
+
+--------------------------------------------------------------------------------
+1. PARAMETERS
+--------------------------------------------------------------------------------
+
+Licensor: Sai Mouli Bandari
+Licensed Work: SessionDB Community Edition (comprising all source code in this 
+               repository, including the UI and Backend components).
+Additional Use Grant: 
+    You may use the Licensed Work for non-production use, personal projects, 
+    internal testing, and small-scale internal business operations. 
+    
+    HOWEVER, you are strictly prohibited from using the Licensed Work to 
+    provide, or as part of, a commercial "Database-as-a-Service," "Managed 
+    Query Environment," "Data Observability Platform," or any other service 
+    that competes with SessionDB's primary commercial offerings.
+
+Change Date: 2030-01-01
+Change License: Apache License, Version 2.0
+
+--------------------------------------------------------------------------------
+2. TERMS AND CONDITIONS
+--------------------------------------------------------------------------------
+
+2.1 GRANT OF RIGHTS. The Licensor hereby grants you a world-wide, royalty-free, 
+non-exclusive, non-sublicensable license to copy, modify, create derivative 
+works of, redistribute, and make Non-Production Use of the Licensed Work.
+
+2.2 PRODUCTION USE. Use of the Licensed Work in a production environment is 
+permitted ONLY if such use falls within the "Additional Use Grant" specified 
+above. Any other production use requires a separate commercial license.
+
+2.3 AUTOMATIC CONVERSION. Effective on the Change Date, or the fourth 
+anniversary of the first publicly available distribution of a specific version 
+of the Licensed Work, whichever comes first, the Licensor hereby grants you the 
+rights provided under the Change License (Apache 2.0), and this BSL License 
+will automatically terminate.
+
+2.4 DERIVATIVE WORKS. All copies of the original and modified Licensed Work, 
+and derivative works thereof, are subject to this License. You must 
+conspicuously display this License on each original or modified copy.
+
+2.5 INTELLECTUAL PROPERTY. This License does not grant you any right in any 
+trademark, logo, or trade name of the Licensor. 
+
+2.6 TERMINATION. Any use of the Licensed Work in violation of this License 
+will automatically terminate your rights under this License for the current 
+and all other versions of the Licensed Work.
+
+2.7 NO WARRANTY. TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSED WORK 
+IS PROVIDED "AS IS." LICENSOR DISCLAIMS ALL WARRANTIES, INCLUDING WARRANTIES 
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+--------------------------------------------------------------------------------
+For commercial licensing inquiries, please contact: [Your Email/Website]

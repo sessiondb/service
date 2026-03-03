@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Sai Mouli Bandari. Licensed under Business Source License 1.1.
+
 package models
 
 import (
@@ -44,6 +46,14 @@ type User struct {
 	SavedScripts     []SavedScript      `gorm:"foreignKey:UserID" json:"savedScripts"`
 	QueryTabs        []QueryTab         `gorm:"foreignKey:UserID" json:"queryTabs"`
 	DBCredentials    []DBUserCredential `gorm:"foreignKey:UserID" json:"dbCredentials,omitempty"`
+	RBACPermissions  pq.StringArray     `gorm:"type:text[]" json:"rbacPermissions"`
+}
+
+// Tenant model
+type Tenant struct {
+	Base
+	Name           string `gorm:"not null" json:"name"`
+	TenantFeatures []byte `gorm:"type:jsonb" json:"tenantFeatures"` // map[string]bool stored as JSONB
 }
 
 // Role model

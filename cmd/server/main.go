@@ -1,12 +1,16 @@
+// Copyright (c) 2026 Sai Mouli Bandari. Licensed under Business Source License 1.1.
+
 package main
 
 import (
 	"log"
+	sessionapi "sessiondb/internal/api"
 	"sessiondb/internal/api/handlers"
 	"sessiondb/internal/api/middleware"
 	"sessiondb/internal/config"
 	"sessiondb/internal/repository"
 	"sessiondb/internal/service"
+	"sessiondb/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -34,9 +38,12 @@ func main() {
 	dbUserCredRepo := repository.NewDBUserCredentialRepository(repository.DB)
 	monitorRepo := repository.NewMonitoringRepository(repository.DB)
 
+	// Initialize new Mock Tenant Client early so it can be injected
+	tenantClient := service.NewMockTenantClient()
+
 	// Initialize Services
 	auditService := service.NewAuditService(auditRepo)
-	authService := service.NewAuthService(userRepo, cfg) // TODO: Inject AuditService into other services for automatic logging
+	authService := service.NewAuthService(userRepo, cfg, tenantClient) // Inject AuditService into other services for automatic logging
 	roleService := service.NewRoleService(roleRepo, userRepo)
 	provisioningService := service.NewDBUserProvisioningService(dbUserCredRepo, instanceRepo)
 	userService := service.NewUserService(userRepo, provisioningService, instanceRepo)
@@ -129,20 +136,21 @@ func main() {
 
 			users := protected.Group("/users")
 			{
-				users.GET("", userHandler.GetAllUsers)
-				users.POST("", userHandler.CreateUser)
+				users.GET("", middleware.CheckPermission(utils.PermUsersRead), userHandler.GetAllUsers)
+				users.POST("", middleware.CheckPermission(utils.PermUsersWrite), userHandler.CreateUser)
 				users.GET("/me", userHandler.GetMe) // Must be before /:id to avoid conflict
-				users.GET("/:id", userHandler.GetUser)
-				users.PUT("/:id", userHandler.UpdateUser)
-				users.DELETE("/:id", userHandler.DeleteUser)
+				users.GET("/:id", middleware.CheckPermission(utils.PermUsersRead), userHandler.GetUser)
+				users.PUT("/:id", middleware.CheckPermission(utils.PermUsersWrite), userHandler.UpdateUser)
+				users.DELETE("/:id", middleware.CheckPermission(utils.PermUsersWrite), userHandler.DeleteUser)
 			}
 
 			// DB User Management
 			dbUsers := protected.Group("/db-users")
 			{
+				dbUsers.Use(middleware.CheckPermission(utils.PermUsersRead))
 				dbUsers.GET("", dbUserHandler.GetDBUsers)
-				dbUsers.PUT("/:id", dbUserHandler.UpdateDBUserRole) // managed cred ID
-				dbUsers.PUT("/:id/link", dbUserHandler.LinkDBUser)  // db entity ID
+				dbUsers.PUT("/:id", middleware.CheckPermission(utils.PermUsersWrite), dbUserHandler.UpdateDBUserRole) // managed cred ID
+				dbUsers.PUT("/:id/link", middleware.CheckPermission(utils.PermUsersWrite), dbUserHandler.LinkDBUser)  // db entity ID
 			}
 
 			// DB Credentials Management
@@ -152,10 +160,13 @@ func main() {
 			}
 
 			// DB Role Management
-			protected.GET("/db-roles", dbRoleHandler.GetDBRoles)
+			protected.GET("/db-roles", middleware.CheckPermission(utils.PermRolesManage), dbRoleHandler.GetDBRoles)
 
 			requests := protected.Group("/requests")
 			{
+				requests.Use(middleware.FeatureGate("advanced_approvals"))
+				requests.Use(middleware.CheckPermission(utils.PermApprovalsManage))
+
 				requests.GET("", approvalHandler.GetRequests)
 				// Create request also mapped here? Docs say POST /approvals (now requests)
 				requests.POST("", approvalHandler.CreateRequest)
@@ -175,6 +186,9 @@ func main() {
 
 			logs := protected.Group("/logs")
 			{
+				logs.Use(middleware.FeatureGate("audit_logs"))
+				logs.Use(middleware.CheckPermission(utils.PermLogsView))
+
 				logs.GET("", auditHandler.GetLogs)
 				logs.POST("", auditHandler.CreateLog)
 			}
@@ -190,6 +204,7 @@ func main() {
 
 			instances := protected.Group("/instances")
 			{
+				instances.Use(middleware.CheckPermission(utils.PermInstancesRead))
 				instances.GET("", instanceHandler.ListInstances)
 				instances.GET("/:id/monitoring", instanceHandler.GetMonitoringLogs)
 				instances.GET("/:id/databases", metaHandler.ListDatabases)
@@ -201,6 +216,7 @@ func main() {
 
 			admin := protected.Group("/admin")
 			{
+				admin.Use(middleware.CheckPermission(utils.PermInstancesManage))
 				insts := admin.Group("/instances")
 				{
 					insts.GET("", instanceHandler.AdminListInstances)
@@ -210,6 +226,11 @@ func main() {
 				}
 			}
 		}
+
+		// Build-Tag Plugin Pattern: Register premium routes dynamically.
+		// If built with `-tags pro`, this points to `internal/api/provider_pro.go`.
+		// If built normally (Community), this points to `internal/api/provider_community.go`.
+		sessionapi.RegisterPremiumRoutes(protected)
 	}
 
 	log.Printf("Starting server on port %s", cfg.Server.Port)

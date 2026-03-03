@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Sai Mouli Bandari. Licensed under Business Source License 1.1.
+
 package middleware
 
 import (
@@ -36,6 +38,8 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 		c.Set("userID", claims.UserID)
 		c.Set("email", claims.Email)
 		c.Set("role", claims.Role)
+		c.Set("rbac_permissions", claims.RBACPermissions)
+		c.Set("tenant_features", claims.TenantFeatures)
 		c.Next()
 	}
 }

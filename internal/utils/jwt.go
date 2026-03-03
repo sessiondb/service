@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Sai Mouli Bandari. Licensed under Business Source License 1.1.
+
 package utils
 
 import (
@@ -10,18 +12,22 @@ import (
 )
 
 type Claims struct {
-	UserID uuid.UUID `json:"user_id"`
-	Email  string    `json:"email"`
-	Role   string    `json:"role"`
+	UserID          uuid.UUID      `json:"user_id"`
+	Email           string         `json:"email"`
+	Role            string         `json:"role"`
+	RBACPermissions []string       `json:"rbac_permissions"`
+	TenantFeatures  map[string]any `json:"tenant_features"`
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(userID uuid.UUID, email, role string, cfg *config.Config) (string, error) {
+func GenerateToken(userID uuid.UUID, email, role string, rbacPermissions []string, tenantFeatures map[string]any, cfg *config.Config) (string, error) {
 	expirationTime := time.Now().Add(time.Duration(cfg.JWT.ExpiryHours) * time.Hour)
 	claims := &Claims{
-		UserID: userID,
-		Email:  email,
-		Role:   role,
+		UserID:          userID,
+		Email:           email,
+		Role:            role,
+		RBACPermissions: rbacPermissions,
+		TenantFeatures:  tenantFeatures,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

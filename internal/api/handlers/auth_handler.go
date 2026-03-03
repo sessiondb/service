@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Sai Mouli Bandari. Licensed under Business Source License 1.1.
+
 package handlers
 
 import (
@@ -18,8 +20,8 @@ func NewAuthHandler(service *service.AuthService) *AuthHandler {
 type LoginRequest struct {
 	Username string `json:"username"` // Frontend sends username for admin, email for others maybe? or just generic "username" field mapping to email
 	// The frontend doc says: "username": "admin_mouli", "password": "..."
-	// But our backend uses email. For now, let's accept "username" and treat it as email if it looks like one, or handle it. 
-	// Actually, the previous implementation used 'email'. The doc says 'username'. 
+	// But our backend uses email. For now, let's accept "username" and treat it as email if it looks like one, or handle it.
+	// Actually, the previous implementation used 'email'. The doc says 'username'.
 	// Let's assume 'username' field in JSON maps to Email in our DB for now, or we need to add Username field or use DBUsername.
 	// The User model has 'Name', 'Email', 'DBUsername'.
 	// I'll add 'Username' to the struct and try to find by Email OR DBUsername.
@@ -51,10 +53,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		identifier = req.Email
 	}
 
-	// Service currently only supports FindByEmail. 
+	// Service currently only supports FindByEmail.
 	// TODO: Update Service/Repo to support identifying by DBUsername or Username.
 	// For now, passing identifier as email.
-	user, token, refreshToken, err := h.Service.Login(identifier, req.Password)
+	user, tenantMap, token, refreshToken, err := h.Service.Login(identifier, req.Password)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": err.Error()})
 		return
@@ -63,19 +65,21 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"token": token,
+			"token":         token,
 			"refresh_token": refreshToken,
 			"user": gin.H{
-				"id":             user.ID,
-				"name":           user.Name,
-				"email":          user.Email,
-				"role":           user.Role.Name,
-				"status":         user.Status,
-				"isSessionBased": user.IsSessionBased,
-				"lastLogin":      user.LastLogin,
-				"permissions":    user.Permissions,
-				"savedScripts":   user.SavedScripts,
-				"queryTabs":      user.QueryTabs,
+				"id":              user.ID,
+				"name":            user.Name,
+				"email":           user.Email,
+				"role":            user.Role.Name,
+				"status":          user.Status,
+				"isSessionBased":  user.IsSessionBased,
+				"lastLogin":       user.LastLogin,
+				"permissions":     user.Permissions,
+				"rbacPermissions": user.RBACPermissions,
+				"tenantFeatures":  tenantMap,
+				"savedScripts":    user.SavedScripts,
+				"queryTabs":       user.QueryTabs,
 			},
 		},
 	})

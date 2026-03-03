@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Sai Mouli Bandari. Licensed under Business Source License 1.1.
+
 package handlers
 
 import (
@@ -33,19 +35,19 @@ func (h *AuditHandler) GetLogs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	var response = make([]gin.H, 0)
 	for _, l := range logs {
 		response = append(response, gin.H{
-			"id": l.ID,
-			"timestamp": l.Timestamp,
-			"user": l.User.Name, // Assuming User relation is loaded and Name is populated
+			"id":           l.ID,
+			"timestamp":    l.Timestamp,
+			"user":         l.User.Name, // Assuming User relation is loaded and Name is populated
 			"session_user": l.SessionUser,
-			"action": l.Action,
-			"resource": l.Resource,
-			"table": l.Table,
-			"query": l.Query,
-			"status": l.Status,
+			"action":       l.Action,
+			"resource":     l.Resource,
+			"table":        l.Table,
+			"query":        l.Query,
+			"status":       l.Status,
 		})
 	}
 
@@ -65,9 +67,9 @@ func (h *AuditHandler) CreateLog(c *gin.Context) {
 	if err == nil {
 		userID = user.ID
 	}
-	// If user not found, we still log but maybe with Nil userID or handle it? 
+	// If user not found, we still log but maybe with Nil userID or handle it?
 	// Frontend sends "user": "admin_mouli".
-	
+
 	log := &models.AuditLog{
 		Timestamp: time.Now(),
 		UserID:    userID,

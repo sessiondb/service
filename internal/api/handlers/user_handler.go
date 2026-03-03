@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Sai Mouli Bandari. Licensed under Business Source License 1.1.
+
 package handlers
 
 import (
@@ -116,7 +118,25 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
-	c.JSON(http.StatusOK, user)
+
+	// Pull RBAC and Tenant features from JWT context securely
+	perms, _ := c.Get("rbac_permissions")
+	features, _ := c.Get("tenant_features")
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":              user.ID,
+		"name":            user.Name,
+		"email":           user.Email,
+		"role":            user.Role.Name,
+		"status":          user.Status,
+		"isSessionBased":  user.IsSessionBased,
+		"lastLogin":       user.LastLogin,
+		"permissions":     user.Permissions,
+		"rbacPermissions": perms,
+		"tenantFeatures":  features,
+		"savedScripts":    user.SavedScripts,
+		"queryTabs":       user.QueryTabs,
+	})
 }
 
 func (h *UserHandler) GetUser(c *gin.Context) {

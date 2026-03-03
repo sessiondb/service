@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Sai Mouli Bandari. Licensed under Business Source License 1.1.
+
 package handlers
 
 import (
@@ -60,7 +62,7 @@ func (h *ApprovalHandler) GetRequests(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	var response = make([]gin.H, 0)
 	for _, r := range requests {
 		var permissions []models.Permission

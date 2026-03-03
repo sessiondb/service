@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Sai Mouli Bandari. Licensed under Business Source License 1.1.
+
 package service
 
 import (
@@ -79,9 +81,9 @@ func (h *NotificationHub) HandleWebSocket(w http.ResponseWriter, r *http.Request
 		log.Printf("WS Error upgrading connection: %v", err)
 		return
 	}
-	
+
 	h.register <- conn
-	
+
 	// Keep reading for closure or pings
 	go func() {
 		defer func() {
