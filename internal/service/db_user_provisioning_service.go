@@ -54,12 +54,12 @@ func (s *DBUserProvisioningService) GenerateDBUsername(user *models.User) string
 	return fmt.Sprintf("%s_%s_%s_%s", prefix, role, name, suffix)
 }
 
-// ProvisionDBUser creates a database user on the target instance
+// ProvisionDBUser creates a database user on the target instance when one does not exist.
+// "Existing user" for this call means the platform user already has a DB credential for this instance; then we return it. Otherwise we create a new DB user (no catalog crawl to link an existing DB user).
 func (s *DBUserProvisioningService) ProvisionDBUser(user *models.User, instance *models.DBInstance) (*models.DBUserCredential, error) {
-	// Check if credential already exists
 	existing, err := s.DBUserCredRepo.FindByUserAndInstance(user.ID, instance.ID)
 	if err == nil && existing != nil {
-		return existing, nil // Already provisioned
+		return existing, nil
 	}
 
 	// Generate username and password

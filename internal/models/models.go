@@ -260,6 +260,26 @@ type UserAIConfig struct {
 	ModelName    string    `json:"modelName"`                    // gpt-4, claude-3-sonnet, etc.
 }
 
+// GlobalAIConfig stores the organization-wide AI API key (admin-set). Single row per deployment.
+type GlobalAIConfig struct {
+	Base
+	ProviderType string  `gorm:"not null" json:"providerType"`
+	APIKey       string  `gorm:"not null" json:"-"`
+	BaseURL      *string `json:"baseUrl,omitempty"`
+	ModelName    string  `json:"modelName"`
+}
+
+// AITokenUsage records per-call AI usage for dashboard (generate_sql, explain). Token counts may be 0 if provider does not return them.
+type AITokenUsage struct {
+	Base
+	UserID       uuid.UUID `gorm:"index;not null" json:"userId"`
+	UsedGlobal   bool      `gorm:"index" json:"usedGlobal"`
+	InputTokens  int       `json:"inputTokens"`
+	OutputTokens int       `json:"outputTokens"`
+	Model        string    `json:"model"`
+	Feature      string    `gorm:"index;not null" json:"feature"` // generate_sql, explain
+}
+
 // AIExecutionPolicy defines per-instance rules for AI-generated query execution (e.g. require approval for DDL).
 type AIExecutionPolicy struct {
 	Base
@@ -335,6 +355,15 @@ type ReportExecution struct {
 	CompletedAt  *time.Time `json:"completedAt,omitempty"`
 	ResultURL    string     `json:"resultUrl,omitempty"`
 	Error        string     `json:"error,omitempty"`
+}
+
+// FeatureNotifyRequest stores "Notify me when this is ready" sign-ups for roadmap features.
+// Used by the FeatureGate / waitlist flow; email comes from JWT when authenticated.
+type FeatureNotifyRequest struct {
+	Base
+	Email      string    `gorm:"index;not null" json:"email"`
+	FeatureKey string    `gorm:"index;not null" json:"featureKey"`
+	UserID     *uuid.UUID `gorm:"index" json:"userId,omitempty"`
 }
 
 // BeforeCreate hook to generate UUIDs if not present
