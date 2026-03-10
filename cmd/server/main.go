@@ -201,13 +201,13 @@ func main() {
 				query.GET("/scripts", queryHandler.GetScripts)
 			}
 
+			// Audit logs: community (permission-only). Export is premium.
 			logs := protected.Group("/logs")
+			logs.Use(middleware.CheckPermission(utils.PermLogsView))
 			{
-				logs.Use(middleware.FeatureGate("audit_logs"))
-				logs.Use(middleware.CheckPermission(utils.PermLogsView))
-
 				logs.GET("", auditHandler.GetLogs)
 				logs.POST("", auditHandler.CreateLog)
+				logs.GET("/export", middleware.FeatureGate("audit_logs_export"), auditHandler.ExportLogs)
 			}
 
 			// User Context (Persisted State)
@@ -247,7 +247,14 @@ func main() {
 		// Build-Tag Plugin Pattern: Register premium routes dynamically.
 		// If built with `-tags pro`, this points to `internal/api/provider_pro.go`.
 		// If built normally (Community), this points to `internal/api/provider_community.go`.
-		sessionapi.RegisterPremiumRoutes(protected)
+		premiumDeps := &sessionapi.PremiumDeps{
+			PermRepo:     permRepo,
+			InstanceRepo: instanceRepo,
+			AccessEngine: accessEngine,
+			DB:           repository.DB,
+			QueryService: queryService,
+		}
+		sessionapi.RegisterPremiumRoutes(protected, premiumDeps)
 	}
 
 	log.Printf("Starting server on port %s", cfg.Server.Port)
