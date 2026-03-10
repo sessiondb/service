@@ -8,6 +8,8 @@ import (
 	"sessiondb/internal/api/handlers"
 	"sessiondb/internal/api/middleware"
 	"sessiondb/internal/config"
+	community_access "sessiondb/internal/community/access"
+	community_ai "sessiondb/internal/community/ai"
 	"sessiondb/internal/repository"
 	"sessiondb/internal/service"
 	"sessiondb/internal/utils"
@@ -37,6 +39,8 @@ func main() {
 	metaRepo := repository.NewMetadataRepository(repository.DB)
 	dbUserCredRepo := repository.NewDBUserCredentialRepository(repository.DB)
 	monitorRepo := repository.NewMonitoringRepository(repository.DB)
+	permRepo := repository.NewPermissionRepository(repository.DB)
+	aiConfigRepo := repository.NewAIConfigRepository(repository.DB)
 
 	// Initialize new Mock Tenant Client early so it can be injected
 	tenantClient := service.NewMockTenantClient()
@@ -53,6 +57,9 @@ func main() {
 	queryService.SetInstanceRepo(instanceRepo)     // Inject instance repo for query execution
 	queryService.SetAuditService(auditService)     // Inject audit service for history logging
 	queryService.SetDBUserCredRepo(dbUserCredRepo) // Inject DB user cred repo for user-level auth
+	accessEngine := community_access.NewEngine(permRepo)
+	queryService.SetAccessEngine(accessEngine)
+	aiEngine := community_ai.NewEngine(aiConfigRepo, accessEngine, metaRepo, userRepo)
 	instanceService := service.NewInstanceService(instanceRepo)
 	syncService := service.NewSyncService(instanceRepo, metaRepo)
 	metaService := service.NewMetadataService(metaRepo)
@@ -78,6 +85,7 @@ func main() {
 	metaHandler := handlers.NewMetadataHandler(metaService, metaRepo, dbUserCredRepo)
 	dbUserHandler := handlers.NewDBUserHandler(provisioningService, metaRepo, instanceRepo)
 	dbRoleHandler := handlers.NewDBRoleHandler(metaRepo, instanceRepo)
+	aiHandler := handlers.NewAIHandler(aiEngine, aiConfigRepo)
 
 	// Setup Router
 	r := gin.Default()
@@ -161,6 +169,15 @@ func main() {
 
 			// DB Role Management
 			protected.GET("/db-roles", middleware.CheckPermission(utils.PermRolesManage), dbRoleHandler.GetDBRoles)
+
+			// AI (BYOK)
+			ai := protected.Group("/ai")
+			{
+				ai.POST("/generate-sql", aiHandler.GenerateSQL)
+				ai.POST("/explain", aiHandler.ExplainQuery)
+				ai.GET("/config", aiHandler.GetAIConfig)
+				ai.PUT("/config", aiHandler.UpdateAIConfig)
+			}
 
 			requests := protected.Group("/requests")
 			{
