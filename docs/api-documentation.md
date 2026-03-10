@@ -346,6 +346,33 @@ Development: http://localhost:3000/v1
 }
 ```
 
+### Register for feature notification (waitlist)
+**Endpoint**: `POST /notify-me` (protected)
+
+Registers the current user to be notified when a roadmap feature is ready. Email is taken from the JWT.
+
+**Request**:
+```json
+{
+  "featureKey": "sessions"
+}
+```
+
+**Response** (201 Created):
+```json
+{
+  "message": "Thanks! We'll notify you when this feature is ready.",
+  "requestId": "uuid"
+}
+```
+
+**Response** (200 OK, already registered):
+```json
+{
+  "message": "You're already on the list. We'll notify you when this feature is ready."
+}
+```
+
 ---
 
 ## 7. User Context (Persisted State)

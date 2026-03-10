@@ -48,6 +48,13 @@ Welcome to the SessionDB documentation. This directory contains comprehensive te
 
 ---
 
+### 4. Feature docs (how features work)
+- [AI Query (BYOK)](./features/ai-query.md) — BYOK config, org vs user config, usage dashboard, SQL markdown strip
+- [Access Control](./features/access-control.md) — Column-to-instance access control
+- [User creation and credentials](./features/user-creation-and-credentials.md) — Platform/DB user creation, send credentials by email, existing-user semantics
+
+---
+
 ## 🚀 Quick Start
 
 ### For Backend Developers
@@ -283,6 +290,18 @@ python -m venv venv
 source venv/bin/activate
 pip install fastapi uvicorn sqlalchemy redis pyjwt bcrypt
 ```
+
+---
+
+## 📄 Landing Page Strategy
+
+For messaging and structure of the SessionDB landing page (open-source-first, feature grid, roadmap framing), see **[Landing Page Strategy](./landing-page-strategy.md)**.
+
+---
+
+## 📋 Implementation Plans
+
+- **[BYOK, AI SQL display, User creation](plans/2026-03-10-byok-ai-display-user-creation.md)** — Admin vs user BYOK, token usage dashboard, fix AI-generated SQL markdown display, user creation flow with optional email credentials.
 
 ---
 
