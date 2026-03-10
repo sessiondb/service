@@ -31,6 +31,9 @@ func (m *MockTenantClient) GetFeaturesForTenant(tenantID string) (TenantFeatures
 	// For now, return a static mock payload matching the backend requirements
 	return TenantFeatures{
 		"audit_logs": {
+			Enabled: true, // Community: view/create audit logs
+		},
+		"audit_logs_export": {
 			Enabled:     false,
 			Reason:      "plan_upgrade_required",
 			MinimumPlan: "Pro",
