@@ -41,6 +41,8 @@ func main() {
 	monitorRepo := repository.NewMonitoringRepository(repository.DB)
 	permRepo := repository.NewPermissionRepository(repository.DB)
 	aiConfigRepo := repository.NewAIConfigRepository(repository.DB)
+	aiUsageRepo := repository.NewAIUsageRepository(repository.DB)
+	featureNotifyRepo := repository.NewFeatureNotifyRepository(repository.DB)
 
 	// Initialize new Mock Tenant Client early so it can be injected
 	tenantClient := service.NewMockTenantClient()
@@ -76,7 +78,8 @@ func main() {
 	// Initialize Handlers
 	authHandler := handlers.NewAuthHandler(authService)
 	roleHandler := handlers.NewRoleHandler(roleService)
-	userHandler := handlers.NewUserHandler(userService, roleService)
+	mailService := service.NewMailService(cfg)
+	userHandler := handlers.NewUserHandler(userService, roleService, mailService)
 	approvalHandler := handlers.NewApprovalHandler(approvalService)
 	queryHandler := handlers.NewQueryHandler(queryService)
 	auditHandler := handlers.NewAuditHandler(auditService, userRepo)
@@ -85,7 +88,9 @@ func main() {
 	metaHandler := handlers.NewMetadataHandler(metaService, metaRepo, dbUserCredRepo)
 	dbUserHandler := handlers.NewDBUserHandler(provisioningService, metaRepo, instanceRepo)
 	dbRoleHandler := handlers.NewDBRoleHandler(metaRepo, instanceRepo)
-	aiHandler := handlers.NewAIHandler(aiEngine, aiConfigRepo)
+	aiHandler := handlers.NewAIHandler(aiEngine, aiConfigRepo, aiUsageRepo)
+	featureNotifyService := service.NewFeatureNotifyService(featureNotifyRepo)
+	featureNotifyHandler := handlers.NewFeatureNotifyHandler(featureNotifyService)
 
 	// Setup Router
 	r := gin.Default()
@@ -177,7 +182,11 @@ func main() {
 				ai.POST("/explain", aiHandler.ExplainQuery)
 				ai.GET("/config", aiHandler.GetAIConfig)
 				ai.PUT("/config", aiHandler.UpdateAIConfig)
+				ai.GET("/usage", aiHandler.GetAIUsage)
 			}
+
+			// "Notify me when this is ready" for roadmap features (waitlist)
+			protected.POST("/notify-me", featureNotifyHandler.Register)
 
 			requests := protected.Group("/requests")
 			{
@@ -234,6 +243,8 @@ func main() {
 			admin := protected.Group("/admin")
 			{
 				admin.Use(middleware.CheckPermission(utils.PermInstancesManage))
+				admin.PUT("/ai-config", aiHandler.UpdateGlobalAIConfig)
+				admin.GET("/ai/usage", aiHandler.GetAdminAIUsage)
 				insts := admin.Group("/instances")
 				{
 					insts.GET("", instanceHandler.AdminListInstances)

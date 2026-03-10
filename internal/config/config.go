@@ -13,6 +13,18 @@ type Config struct {
 	Database DatabaseConfig
 	Redis    RedisConfig
 	JWT      JWTConfig
+	Mail     MailConfig
+}
+
+// MailConfig for sending credentials email on user create. When disabled, SendCredentialsEmail is a no-op.
+type MailConfig struct {
+	Enabled  bool
+	From     string
+	AppURL   string // Base URL for login link (e.g. https://app.sessiondb.io)
+	SMTPHost string
+	SMTPPort int
+	SMTPUser string
+	SMTPPass string
 }
 
 type ServerConfig struct {
@@ -57,6 +69,8 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("REDIS_ADDR", "localhost:6379")
 	viper.SetDefault("JWT_EXPIRY_HOURS", 24)
 	viper.SetDefault("JWT_REFRESH_EXPIRY", 720) // 30 days
+	viper.SetDefault("MAIL_ENABLED", false)
+	viper.SetDefault("MAIL_SMTP_PORT", 587)
 
 	if err := viper.ReadInConfig(); err != nil {
 		// Just log error and continue if file not found, as we rely on env vars too
@@ -85,6 +99,15 @@ func LoadConfig() (*Config, error) {
 			Secret:        viper.GetString("JWT_SECRET"),
 			ExpiryHours:   viper.GetInt("JWT_EXPIRY_HOURS"),
 			RefreshExpiry: viper.GetInt("JWT_REFRESH_EXPIRY"),
+		},
+		Mail: MailConfig{
+			Enabled:  viper.GetBool("MAIL_ENABLED"),
+			From:     viper.GetString("MAIL_FROM"),
+			AppURL:   viper.GetString("APP_URL"),
+			SMTPHost: viper.GetString("MAIL_SMTP_HOST"),
+			SMTPPort: viper.GetInt("MAIL_SMTP_PORT"),
+			SMTPUser: viper.GetString("MAIL_SMTP_USER"),
+			SMTPPass: viper.GetString("MAIL_SMTP_PASS"),
 		},
 	}
 
