@@ -20,7 +20,16 @@ Welcome to the SessionDB documentation. This directory contains comprehensive te
 
 ---
 
-### 2. [API Documentation](./api-documentation.md)
+### 2. [Database Dialect Layer](./dialect-layer.md)
+**Purpose**: Tech doc for the database dialect abstraction (multi-DB support)
+
+**Contents**: Interface, usage, consumers, how to add a new database type.
+
+**Target Audience**: Backend developers
+
+---
+
+### 3. [API Documentation](./api-documentation.md)
 **Purpose**: Complete REST API reference for SessionDB
 
 **Contents**:
@@ -54,8 +63,8 @@ Welcome to the SessionDB documentation. This directory contains comprehensive te
    - Authentication flow
 
 ### For Frontend Developers
-1. Start with the [API Documentation](./api-documentation.md)
-2. Focus on the authentication flow
+1. Start with the [Frontend Integration Guide](./frontend-integration.md) for base URL, auth, and existing endpoints.
+2. Use the [API Documentation](./api-documentation.md) for full request/response details.
 3. Review the data models in the [Backend Requirements](./backend-requirements.md)
 
 ### For Product Managers

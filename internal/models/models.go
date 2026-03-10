@@ -67,17 +67,23 @@ type Role struct {
 	UserCount    int          `gorm:"-" json:"userCount,omitempty"` // Computed field, not stored in DB
 }
 
-// Permission model
+// Permission model — data-level access (instance/database/schema/table/column).
+// System RBAC (users:read, etc.) is separate; see utils/rbac.go.
 type Permission struct {
 	Base
-	RoleID     *uuid.UUID     `gorm:"index" json:"roleId,omitempty"`
-	UserID     *uuid.UUID     `gorm:"index" json:"userId,omitempty"`
-	Database   string         `gorm:"not null" json:"database"`        // '*' for all
-	Table      string         `gorm:"not null" json:"table"`           // '*' for all
-	Privileges pq.StringArray `gorm:"type:text[]" json:"privileges"`   // Array of strings: READ, WRITE, DELETE, EXECUTE, ALL
-	Type       string         `gorm:"default:'permanent'" json:"type"` // permanent, temp, expiring
-	ExpiresAt  *time.Time     `json:"expiresAt,omitempty"`
-	Expiry     *time.Time     `gorm:"-" json:"expiry,omitempty"` // Alias for frontend compatibility
+	RoleID       *uuid.UUID `gorm:"index" json:"roleId,omitempty"`
+	UserID       *uuid.UUID `gorm:"index" json:"userId,omitempty"`
+	InstanceID   *uuid.UUID `gorm:"index" json:"instanceId,omitempty"` // which target DB instance (nil = legacy)
+	Database     string     `gorm:"not null" json:"database"`          // '*' for all
+	Schema       string     `json:"schema,omitempty"`
+	Table        string     `gorm:"not null" json:"table"`   // '*' for all
+	Column       string     `json:"column,omitempty"`        // empty = table-level; specific = column-level
+	Privileges   pq.StringArray `gorm:"type:text[]" json:"privileges"` // SELECT, INSERT, UPDATE, DELETE, ALL
+	Type         string     `gorm:"default:'permanent'" json:"type"`    // permanent, temp, expiring
+	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
+	Expiry       *time.Time `gorm:"-" json:"expiry,omitempty"` // Alias for frontend compatibility
+	GrantedBy    uuid.UUID  `gorm:"type:uuid" json:"grantedBy,omitempty"`
+	ScheduleCron *string    `json:"scheduleCron,omitempty"` // Premium: time-window access (e.g. "0 9-17 * * MON-FRI")
 }
 
 func (p *Permission) BeforeSave(tx *gorm.DB) error {
@@ -242,6 +248,25 @@ type DBRoleMembership struct {
 	InstanceID uuid.UUID `gorm:"index" json:"instanceId"`
 	RoleName   string    `json:"roleName"`   // The role being granted
 	MemberName string    `json:"memberName"` // The user/role receiving the grant
+}
+
+// UserAIConfig stores BYOK API keys for the AI query engine (community). Encrypted at rest.
+type UserAIConfig struct {
+	Base
+	UserID       uuid.UUID `gorm:"uniqueIndex:idx_user_ai_provider;not null" json:"userId"`
+	ProviderType string    `gorm:"not null" json:"providerType"` // openai, anthropic, custom
+	APIKey       string    `gorm:"not null" json:"-"`            // AES-256 encrypted
+	BaseURL      *string   `json:"baseUrl,omitempty"`            // for custom OpenAI-compatible endpoints
+	ModelName    string    `json:"modelName"`                    // gpt-4, claude-3-sonnet, etc.
+}
+
+// AIExecutionPolicy defines per-instance rules for AI-generated query execution (e.g. require approval for DDL).
+type AIExecutionPolicy struct {
+	Base
+	InstanceID      uuid.UUID      `gorm:"index;not null" json:"instanceId"`
+	ActionType      string         `gorm:"not null" json:"actionType"`   // SELECT, INSERT, UPDATE, DELETE, DDL, USER_MGMT
+	RequireApproval bool           `gorm:"default:true" json:"requireApproval"`
+	AllowedRoles    pq.StringArray `gorm:"type:text[]" json:"allowedRoles"` // role names that can auto-execute
 }
 
 // BeforeCreate hook to generate UUIDs if not present

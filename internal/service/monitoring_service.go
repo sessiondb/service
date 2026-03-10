@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sessiondb/internal/dialect"
 	"sessiondb/internal/models"
 	"sessiondb/internal/repository"
 	"time"
@@ -49,21 +50,22 @@ func (s *MonitoringService) MonitorInstance(instanceID uuid.UUID) error {
 	var metrics MySQLMetrics
 	message := "Checked successfully"
 
-	// Connect and check
-	dsn := s.getDSN(instance)
-	db, err := sql.Open(instance.Type, dsn)
-	if err != nil {
+	d, dErr := dialect.GetDialect(instance.Type)
+	if dErr != nil {
 		status = "offline"
-		message = fmt.Sprintf("Failed to connect: %v", err)
+		message = dErr.Error()
 	} else {
-		defer db.Close()
-		err = db.Ping()
+		dsn := d.BuildAdminDSN(instance)
+		db, err := sql.Open(d.DriverName(), dsn)
 		if err != nil {
 			status = "offline"
-			message = fmt.Sprintf("Ping failed: %v", err)
+			message = fmt.Sprintf("Failed to connect: %v", err)
 		} else {
-			// Fetch MySQL metrics if type is mysql
-			if instance.Type == "mysql" {
+			defer db.Close()
+			if err = db.Ping(); err != nil {
+				status = "offline"
+				message = fmt.Sprintf("Ping failed: %v", err)
+			} else if instance.Type == "mysql" {
 				metrics, err = s.fetchMySQLMetrics(db)
 				if err != nil {
 					log.Printf("Error fetching metrics for %s: %v", instance.Name, err)
@@ -148,16 +150,4 @@ func (s *MonitoringService) triggerAlert(instance *models.DBInstance, title, mes
 	if instance.AlertEmail != "" {
 		log.Printf("SENDING EMAIL to %s: Subject: %s, Body: %s", instance.AlertEmail, title, message)
 	}
-}
-
-func (s *MonitoringService) getDSN(instance *models.DBInstance) string {
-	switch instance.Type {
-	case "mysql":
-		return fmt.Sprintf("%s:%s@tcp(%s:%d)/?parseTime=true",
-			instance.Username, instance.Password, instance.Host, instance.Port)
-	case "postgres":
-		return fmt.Sprintf("host=%s user=%s password=%s dbname=postgres port=%d sslmode=disable",
-			instance.Host, instance.Username, instance.Password, instance.Port)
-	}
-	return ""
 }

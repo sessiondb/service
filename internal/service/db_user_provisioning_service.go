@@ -5,14 +5,13 @@ package service
 import (
 	"database/sql"
 	"fmt"
+	"sessiondb/internal/dialect"
 	"sessiondb/internal/models"
 	"sessiondb/internal/repository"
 	"sessiondb/internal/utils"
 	"strings"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
 )
 
 type DBUserProvisioningService struct {
@@ -102,157 +101,114 @@ func (s *DBUserProvisioningService) ProvisionDBUser(user *models.User, instance 
 	return cred, nil
 }
 
-// createDBUserOnInstance creates the actual database user
+// createDBUserOnInstance creates the actual database user using the dialect for the instance type.
 func (s *DBUserProvisioningService) createDBUserOnInstance(instance *models.DBInstance, username, password string) error {
-	dsn := s.buildAdminDSN(instance)
-
-	db, err := sql.Open(instance.Type, dsn)
+	d, err := dialect.GetDialect(instance.Type)
+	if err != nil {
+		return err
+	}
+	dsn := d.BuildAdminDSN(instance)
+	db, err := sql.Open(d.DriverName(), dsn)
 	if err != nil {
 		return fmt.Errorf("failed to connect to instance: %w", err)
 	}
 	defer db.Close()
-
-	var createUserSQL string
-	if instance.Type == "mysql" {
-		createUserSQL = fmt.Sprintf("CREATE USER '%s'@'%%' IDENTIFIED BY '%s'", username, password)
-	} else if instance.Type == "postgres" {
-		createUserSQL = fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", username, password)
-	} else {
-		return fmt.Errorf("unsupported database type: %s", instance.Type)
-	}
-
-	if _, err := db.Exec(createUserSQL); err != nil {
+	if _, err := db.Exec(d.CreateUserSQL(username, password)); err != nil {
 		return fmt.Errorf("failed to execute CREATE USER: %w", err)
 	}
-
 	return nil
 }
 
-// GrantPermissions grants permissions to a DB user
+// GrantPermissions grants permissions to a DB user using the instance's dialect.
 func (s *DBUserProvisioningService) GrantPermissions(cred *models.DBUserCredential, permissions []models.Permission) error {
 	instance, err := s.InstanceRepo.FindByID(cred.InstanceID)
 	if err != nil {
 		return fmt.Errorf("failed to find instance: %w", err)
 	}
-
-	dsn := s.buildAdminDSN(instance)
-	db, err := sql.Open(instance.Type, dsn)
+	d, err := dialect.GetDialect(instance.Type)
+	if err != nil {
+		return err
+	}
+	dsn := d.BuildAdminDSN(instance)
+	db, err := sql.Open(d.DriverName(), dsn)
 	if err != nil {
 		return fmt.Errorf("failed to connect to instance: %w", err)
 	}
 	defer db.Close()
-
 	for _, perm := range permissions {
-		if err := s.grantPermission(db, instance.Type, cred.DBUsername, perm); err != nil {
+		if err := s.grantPermission(db, d, cred.DBUsername, perm); err != nil {
 			return fmt.Errorf("failed to grant permission: %w", err)
 		}
 	}
-
 	return nil
 }
 
-// grantPermission grants a single permission
-func (s *DBUserProvisioningService) grantPermission(db *sql.DB, dbType, username string, perm models.Permission) error {
-	privileges := strings.Join(perm.Privileges, ", ")
-
-	var grantSQL string
-	if dbType == "mysql" {
-		if perm.Table == "*" {
-			// Grant on entire database
-			grantSQL = fmt.Sprintf("GRANT %s ON %s.* TO '%s'@'%%'", privileges, perm.Database, username)
-		} else {
-			// Grant on specific table
-			grantSQL = fmt.Sprintf("GRANT %s ON %s.%s TO '%s'@'%%'", privileges, perm.Database, perm.Table, username)
-		}
-	} else if dbType == "postgres" {
-		if perm.Table == "*" {
-			// Grant on entire database
-			grantSQL = fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s; GRANT %s ON ALL TABLES IN SCHEMA public TO %s",
-				perm.Database, username, privileges, username)
-		} else {
-			// Grant on specific table
-			grantSQL = fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, perm.Table, username)
-		}
+// grantPermission grants a single permission using the dialect to build SQL.
+func (s *DBUserProvisioningService) grantPermission(db *sql.DB, d dialect.DatabaseDialect, username string, perm models.Permission) error {
+	schema := "public"
+	if d.Type() == "mysql" {
+		schema = perm.Database
 	}
-
+	grantSQL := d.GrantTableSQL(username, perm.Database, schema, perm.Table, perm.Privileges)
 	if _, err := db.Exec(grantSQL); err != nil {
 		return fmt.Errorf("failed to execute GRANT: %w", err)
 	}
-
 	return nil
 }
 
-// RevokePermissions revokes permissions from a DB user
+// RevokePermissions revokes permissions from a DB user using the instance's dialect.
 func (s *DBUserProvisioningService) RevokePermissions(cred *models.DBUserCredential, permissions []models.Permission) error {
 	instance, err := s.InstanceRepo.FindByID(cred.InstanceID)
 	if err != nil {
 		return fmt.Errorf("failed to find instance: %w", err)
 	}
-
-	dsn := s.buildAdminDSN(instance)
-	db, err := sql.Open(instance.Type, dsn)
+	d, err := dialect.GetDialect(instance.Type)
+	if err != nil {
+		return err
+	}
+	dsn := d.BuildAdminDSN(instance)
+	db, err := sql.Open(d.DriverName(), dsn)
 	if err != nil {
 		return fmt.Errorf("failed to connect to instance: %w", err)
 	}
 	defer db.Close()
-
 	for _, perm := range permissions {
-		if err := s.revokePermission(db, instance.Type, cred.DBUsername, perm); err != nil {
+		if err := s.revokePermission(db, d, cred.DBUsername, perm); err != nil {
 			return fmt.Errorf("failed to revoke permission: %w", err)
 		}
 	}
-
 	return nil
 }
 
-// revokePermission revokes a single permission
-func (s *DBUserProvisioningService) revokePermission(db *sql.DB, dbType, username string, perm models.Permission) error {
-	privileges := strings.Join(perm.Privileges, ", ")
-
-	var revokeSQL string
-	if dbType == "mysql" {
-		if perm.Table == "*" {
-			revokeSQL = fmt.Sprintf("REVOKE %s ON %s.* FROM '%s'@'%%'", privileges, perm.Database, username)
-		} else {
-			revokeSQL = fmt.Sprintf("REVOKE %s ON %s.%s FROM '%s'@'%%'", privileges, perm.Database, perm.Table, username)
-		}
-	} else if dbType == "postgres" {
-		if perm.Table == "*" {
-			revokeSQL = fmt.Sprintf("REVOKE %s ON ALL TABLES IN SCHEMA public FROM %s", privileges, username)
-		} else {
-			revokeSQL = fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s", privileges, perm.Table, username)
-		}
+func (s *DBUserProvisioningService) revokePermission(db *sql.DB, d dialect.DatabaseDialect, username string, perm models.Permission) error {
+	schema := "public"
+	if d.Type() == "mysql" {
+		schema = perm.Database
 	}
-
+	revokeSQL := d.RevokeTableSQL(username, perm.Database, schema, perm.Table, perm.Privileges)
 	if _, err := db.Exec(revokeSQL); err != nil {
 		return fmt.Errorf("failed to execute REVOKE: %w", err)
 	}
-
 	return nil
 }
 
-// DeprovisionDBUser drops the database user
+// DeprovisionDBUser drops the database user using the instance's dialect.
 func (s *DBUserProvisioningService) DeprovisionDBUser(cred *models.DBUserCredential) error {
 	instance, err := s.InstanceRepo.FindByID(cred.InstanceID)
 	if err != nil {
 		return fmt.Errorf("failed to find instance: %w", err)
 	}
-
-	dsn := s.buildAdminDSN(instance)
-	db, err := sql.Open(instance.Type, dsn)
+	d, err := dialect.GetDialect(instance.Type)
+	if err != nil {
+		return err
+	}
+	dsn := d.BuildAdminDSN(instance)
+	db, err := sql.Open(d.DriverName(), dsn)
 	if err != nil {
 		return fmt.Errorf("failed to connect to instance: %w", err)
 	}
 	defer db.Close()
-
-	var dropUserSQL string
-	if instance.Type == "mysql" {
-		dropUserSQL = fmt.Sprintf("DROP USER '%s'@'%%'", cred.DBUsername)
-	} else if instance.Type == "postgres" {
-		dropUserSQL = fmt.Sprintf("DROP USER %s", cred.DBUsername)
-	}
-
-	if _, err := db.Exec(dropUserSQL); err != nil {
+	if _, err := db.Exec(d.DropUserSQL(cred.DBUsername)); err != nil {
 		return fmt.Errorf("failed to drop user: %w", err)
 	}
 
@@ -262,28 +218,6 @@ func (s *DBUserProvisioningService) DeprovisionDBUser(cred *models.DBUserCredent
 	}
 
 	return nil
-}
-
-// buildAdminDSN builds a DSN using admin credentials
-func (s *DBUserProvisioningService) buildAdminDSN(instance *models.DBInstance) string {
-	if instance.Type == "mysql" {
-		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
-			instance.Username,
-			instance.Password,
-			instance.Host,
-			instance.Port,
-			"mysql", // Connect to mysql database for user management
-		)
-	} else if instance.Type == "postgres" {
-		return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-			instance.Host,
-			instance.Port,
-			instance.Username,
-			instance.Password,
-			"postgres", // Connect to postgres database for user management
-		)
-	}
-	return ""
 }
 
 // UpdateUserRole updates the role of a DB user
@@ -304,27 +238,24 @@ func (s *DBUserProvisioningService) UpdateUserRole(credentialID uuid.UUID, newRo
 		return fmt.Errorf("invalid or empty role: %s", newRole)
 	}
 
-	// 2. Connect to DB
-	dsn := s.buildAdminDSN(instance)
-	db, err := sql.Open(instance.Type, dsn)
+	d, err := dialect.GetDialect(instance.Type)
+	if err != nil {
+		return fmt.Errorf("failed to get dialect: %w", err)
+	}
+	dsn := d.BuildAdminDSN(instance)
+	db, err := sql.Open(d.DriverName(), dsn)
 	if err != nil {
 		return fmt.Errorf("failed to connect to instance: %w", err)
 	}
 	defer db.Close()
 
-	// 3. Revoke existing permissions (Simpler to revoke all on target DBs)
-	// For MVP, we'll revoke on *.* or public schema.
-	// A more robust way is to fetch current grants, but that's complex.
-	// We'll trust our "revoke all" logic.
-	allPerms := s.getPermissionsForRole("admin", instance.Type) // Superserset
-	for _, perm := range allPerms {
-		// Ignore error on revoke as they might not have it
-		_ = s.revokePermission(db, instance.Type, cred.DBUsername, perm)
+	// Revoke all then grant new permissions
+	if _, err := db.Exec(d.RevokeAllSQL(cred.DBUsername)); err != nil {
+		// Ignore revoke error (user might have no grants)
+		_ = err
 	}
-
-	// 4. Grant new permissions
 	for _, perm := range newPermissions {
-		if err := s.grantPermission(db, instance.Type, cred.DBUsername, perm); err != nil {
+		if err := s.grantPermission(db, d, cred.DBUsername, perm); err != nil {
 			return fmt.Errorf("failed to grant permission: %w", err)
 		}
 	}

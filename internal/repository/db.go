@@ -82,9 +82,18 @@ func Migrate() {
 		&models.DBEntity{},
 		&models.DBPrivilege{},
 		&models.DBRoleMembership{},
+		&models.UserAIConfig{},
+		&models.AIExecutionPolicy{},
 	)
 	if err != nil {
 		log.Fatalf("Database migration failed: %v", err)
+	}
+
+	// Remove permissions that have no instance_id (legacy); only instance-scoped permissions are valid.
+	if res := DB.Unscoped().Where("instance_id IS NULL").Delete(&models.Permission{}); res.Error != nil {
+		log.Printf("Warning: cleanup of permissions without instance_id failed: %v", res.Error)
+	} else if res.RowsAffected > 0 {
+		log.Printf("Removed %d permission(s) with no instance_id", res.RowsAffected)
 	}
 
 	SeedRoles()

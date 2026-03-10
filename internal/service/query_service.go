@@ -3,19 +3,22 @@
 package service
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"sessiondb/internal/apierrors"
 	"sessiondb/internal/config"
+	"sessiondb/internal/dialect"
+	"sessiondb/internal/engine"
 	"sessiondb/internal/models"
 	"sessiondb/internal/repository"
 	"sessiondb/internal/utils"
 	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql" // MySQL driver
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
-	_ "github.com/lib/pq" // Postgres driver
+	_ "github.com/lib/pq"
 )
 
 type QueryService struct {
@@ -23,6 +26,7 @@ type QueryService struct {
 	InstanceRepo   *repository.InstanceRepository
 	DBUserCredRepo *repository.DBUserCredentialRepository
 	AuditService   *AuditService
+	AccessEngine   engine.AccessEngine // optional: when set, enforces data access before execution
 	Config         *config.Config
 }
 
@@ -48,11 +52,27 @@ func (s *QueryService) SetDBUserCredRepo(repo *repository.DBUserCredentialReposi
 	s.DBUserCredRepo = repo
 }
 
+// SetAccessEngine sets the optional AccessEngine for data-level access checks before query execution.
+func (s *QueryService) SetAccessEngine(ae engine.AccessEngine) {
+	s.AccessEngine = ae
+}
+
 func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, query, ipAddress, userAgent string) (interface{}, error) {
 	// Lookup instance
 	instance, err := s.InstanceRepo.FindByID(instanceID)
 	if err != nil {
 		return nil, fmt.Errorf("instance not found: %w", err)
+	}
+
+	// Data access check: user must have at least one permission on this instance
+	if s.AccessEngine != nil {
+		perms, err := s.AccessEngine.GetEffectivePermissions(context.Background(), userID, instanceID)
+		if err != nil {
+			return nil, fmt.Errorf("access check: %w", err)
+		}
+		if len(perms) == 0 {
+			return nil, apierrors.NewAppError(403, apierrors.CodeForbidden, "no data access to this instance")
+		}
 	}
 
 	// Resolve credentials: try user-level creds first, fall back to admin
@@ -76,28 +96,12 @@ func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, quer
 		usingUserCreds = true
 	}
 
-	// Build DSN based on instance type
-	var dsn string
-	var driverName string
-	switch instance.Type {
-	case "postgres":
-		driverName = "postgres"
-		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s sslmode=disable",
-			instance.Host, instance.Port, dbUser, dbPass)
-	case "mysql":
-		driverName = "mysql"
-		cleanUser := dbUser
-		if strings.Contains(cleanUser, "@") {
-			cleanUser = strings.Split(cleanUser, "@")[0]
-			cleanUser = strings.Trim(cleanUser, "'\"")
-		}
-		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/",
-			cleanUser, dbPass, instance.Host, instance.Port)
-	default:
-		return nil, fmt.Errorf("unsupported database type: %s", instance.Type)
+	d, err := dialect.GetDialect(instance.Type)
+	if err != nil {
+		return nil, fmt.Errorf("unsupported database type: %w", err)
 	}
-
-	db, err := sql.Open(driverName, dsn)
+	dsn := d.BuildDSNForUser(instance, "", dbUser, dbPass)
+	db, err := sql.Open(d.DriverName(), dsn)
 	if err != nil {
 		if usingUserCreds {
 			return nil, apierrors.ErrUserCredsInvalid
