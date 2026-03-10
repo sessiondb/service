@@ -99,12 +99,15 @@ func Migrate() {
 		&models.DBPrivilege{},
 		&models.DBRoleMembership{},
 		&models.UserAIConfig{},
+		&models.GlobalAIConfig{},
+		&models.AITokenUsage{},
 		&models.AIExecutionPolicy{},
 		&models.CredentialSession{},
 		&models.AlertRule{},
 		&models.AlertEvent{},
 		&models.ReportDefinition{},
 		&models.ReportExecution{},
+		&models.FeatureNotifyRequest{},
 	)
 	if err != nil {
 		log.Fatalf("Database migration failed: %v", err)
