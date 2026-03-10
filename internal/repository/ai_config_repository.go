@@ -3,6 +3,7 @@
 package repository
 
 import (
+	"errors"
 	"sessiondb/internal/models"
 
 	"github.com/google/uuid"
@@ -31,6 +32,24 @@ func (r *AIConfigRepository) GetUserAIConfig(userID uuid.UUID) (*models.UserAICo
 
 // SaveUserAIConfig creates or updates the user's AI config.
 func (r *AIConfigRepository) SaveUserAIConfig(cfg *models.UserAIConfig) error {
+	return r.DB.Save(cfg).Error
+}
+
+// GetGlobalAIConfig returns the organization-wide AI config. Returns (nil, nil) when no row exists.
+func (r *AIConfigRepository) GetGlobalAIConfig() (*models.GlobalAIConfig, error) {
+	var cfg models.GlobalAIConfig
+	err := r.DB.First(&cfg).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+// SaveGlobalAIConfig creates or updates the global AI config (single row).
+func (r *AIConfigRepository) SaveGlobalAIConfig(cfg *models.GlobalAIConfig) error {
 	return r.DB.Save(cfg).Error
 }
 

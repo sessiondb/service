@@ -108,5 +108,5 @@ func (p *OpenAICompatibleProvider) chat(ctx context.Context, body openAIReq) (st
 	if len(out.Choices) == 0 {
 		return "", fmt.Errorf("no response from API")
 	}
-	return out.Choices[0].Message.Content, nil
+	return StripSQLCodeFence(out.Choices[0].Message.Content), nil
 }
