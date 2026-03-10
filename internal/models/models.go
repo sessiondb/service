@@ -60,7 +60,7 @@ type Tenant struct {
 type Role struct {
 	Base
 	Name         string       `gorm:"uniqueIndex;not null" json:"name"`
-	DBKey        string       `gorm:"uniqueIndex;not null" json:"dbKey"`
+	Key          string       `gorm:"column:key;uniqueIndex;not null" json:"key"` // Role key, underscored e.g. super_admin
 	Description  string       `json:"description,omitempty"`
 	IsSystemRole bool         `gorm:"default:false" json:"isSystemRole"`
 	Permissions  []Permission `gorm:"foreignKey:RoleID" json:"permissions"`
@@ -267,6 +267,74 @@ type AIExecutionPolicy struct {
 	ActionType      string         `gorm:"not null" json:"actionType"`   // SELECT, INSERT, UPDATE, DELETE, DDL, USER_MGMT
 	RequireApproval bool           `gorm:"default:true" json:"requireApproval"`
 	AllowedRoles    pq.StringArray `gorm:"type:text[]" json:"allowedRoles"` // role names that can auto-execute
+}
+
+// CredentialSession (Phase 4 – Session Engine, premium) links ephemeral or leased DB credentials to a user and time window for audit.
+type CredentialSession struct {
+	Base
+	UserID       uuid.UUID  `gorm:"index;not null" json:"userId"`
+	InstanceID   uuid.UUID  `gorm:"index;not null" json:"instanceId"`
+	SessionType  string     `gorm:"not null" json:"sessionType"` // "ephemeral", "lease"
+	DBUsername   string     `gorm:"not null;index" json:"dbUsername"`
+	CredentialID *uuid.UUID `gorm:"type:uuid;index" json:"credentialId,omitempty"` // for lease mode
+	StartedAt    time.Time  `gorm:"not null" json:"startedAt"`
+	ExpiresAt    time.Time  `gorm:"not null" json:"expiresAt"`
+	EndedAt      *time.Time `json:"endedAt,omitempty"`
+	Status       string     `gorm:"default:'active';index" json:"status"` // "active", "expired", "revoked"
+}
+
+// AlertRule (Phase 5 – Alert Engine, premium) defines when to fire alerts (e.g. threshold on query_execution).
+type AlertRule struct {
+	Base
+	TenantID    uuid.UUID `gorm:"index;not null" json:"tenantId"`
+	CreatedBy   uuid.UUID `gorm:"index;not null" json:"createdBy"`
+	Name        string    `gorm:"not null" json:"name"`
+	Description string    `json:"description,omitempty"`
+	EventSource string    `gorm:"not null;index" json:"eventSource"` // e.g. "query_execution", "instance_health"
+	Condition   []byte    `gorm:"type:jsonb" json:"condition"`       // threshold, filters, etc.
+	Severity    string    `gorm:"not null;default:'medium'" json:"severity"` // low, medium, high, critical
+	IsEnabled   bool      `gorm:"default:true" json:"isEnabled"`
+	Channels    []byte    `gorm:"type:jsonb" json:"channels,omitempty"` // email, webhook, etc.
+}
+
+// AlertEvent (Phase 5) records a fired alert for a rule.
+type AlertEvent struct {
+	Base
+	RuleID     uuid.UUID `gorm:"index;not null" json:"ruleId"`
+	TenantID   uuid.UUID `gorm:"index;not null" json:"tenantId"`
+	Severity   string    `gorm:"not null" json:"severity"`
+	Title      string    `gorm:"not null" json:"title"`
+	Description string   `json:"description,omitempty"`
+	Metadata   []byte    `gorm:"type:jsonb" json:"metadata,omitempty"`
+	Status     string    `gorm:"default:'open';index" json:"status"` // open, acknowledged, resolved
+	Source     string    `json:"source,omitempty"`
+}
+
+// ReportDefinition (Phase 6 – Report Engine, premium) defines a report (data sources, filters, schedule).
+type ReportDefinition struct {
+	Base
+	TenantID         uuid.UUID  `gorm:"index;not null" json:"tenantId"`
+	CreatedBy        uuid.UUID  `gorm:"index;not null" json:"createdBy"`
+	Name             string     `gorm:"not null" json:"name"`
+	Description      string     `json:"description,omitempty"`
+	DataSources      []byte     `gorm:"type:jsonb" json:"dataSources"`       // instance/queries or views
+	Filters          []byte     `gorm:"type:jsonb" json:"filters,omitempty"`
+	ScheduleCron     *string    `json:"scheduleCron,omitempty"`              // optional; nil = on-demand only
+	DeliveryChannels []byte     `gorm:"type:jsonb" json:"deliveryChannels,omitempty"`
+	Format           string     `gorm:"default:'csv'" json:"format"`        // csv, json
+	IsEnabled        bool       `gorm:"default:true" json:"isEnabled"`
+	LastRunAt        *time.Time `json:"lastRunAt,omitempty"`
+}
+
+// ReportExecution (Phase 6) records a single run of a report.
+type ReportExecution struct {
+	Base
+	DefinitionID uuid.UUID  `gorm:"index;not null" json:"definitionId"`
+	Status       string     `gorm:"not null;index" json:"status"` // running, completed, failed
+	StartedAt    time.Time  `gorm:"not null" json:"startedAt"`
+	CompletedAt  *time.Time `json:"completedAt,omitempty"`
+	ResultURL    string     `json:"resultUrl,omitempty"`
+	Error        string     `json:"error,omitempty"`
 }
 
 // BeforeCreate hook to generate UUIDs if not present
