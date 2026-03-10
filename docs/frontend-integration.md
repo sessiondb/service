@@ -22,7 +22,7 @@ These endpoints are stable. Phase 1 (Database Dialect Layer) did **not** change 
 | Users | POST | `/v1/users` | Create user |
 | Users | GET | `/v1/users/me` | Current user profile |
 | Users | GET/PUT/DELETE | `/v1/users/:id` | Get/update/delete user |
-| Roles | CRUD | `/v1/roles` | Role management |
+| Roles | CRUD | `/v1/roles` | Role management; response includes `key` (e.g. super_admin), not dbKey |
 | DB credentials | CRUD | `/v1/db-users` | DB user provisioning |
 | DB credentials | POST | `/v1/db-credentials/verify` | Verify credentials |
 | DB roles | GET | `/v1/db-roles` | List DB roles on instance |
@@ -69,6 +69,41 @@ These endpoints are stable. Phase 1 (Database Dialect Layer) did **not** change 
 - **GET response:** `{ "configured": true, "providerType": "openai", "modelName": "gpt-4", "baseUrl": "..." }` or `{ "configured": false }`.
 - **PUT body:** `{ "providerType": "openai", "apiKey": "sk-...", "baseUrl": null, "modelName": "gpt-4" }`. API key is stored encrypted.
 
+## Premium APIs (Phases 4–6)
+
+Available when the backend is built with `-tags pro`. All under `/v1`, JWT required.
+
+### Session (Phase 4)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/sessions/start` | Body: `{ "instanceId": "uuid", "ttlMinutes": number? }`. Response: `{ "sessionId", "dbUsername", "password", "expiresAt" }`. |
+| POST | `/v1/sessions/:id/end` | End session. Response: 204. |
+| GET | `/v1/sessions/active?instanceId=<uuid>` | Response: `{ "active": true, "sessionId", "dbUsername", "expiresAt" }` or `{ "active": false }`. |
+
+### Alerts (Phase 5)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/alerts/rules` | Body: `{ "name", "description?", "eventSource", "condition", "severity?", "isEnabled?", "channels?" }`. `condition` e.g. `{ "metric": "duration_ms", "op": ">", "value": 5000 }`. |
+| GET | `/v1/alerts/rules` | List rules. |
+| GET | `/v1/alerts/rules/:id` | Get rule. |
+| PUT | `/v1/alerts/rules/:id` | Update rule. |
+| DELETE | `/v1/alerts/rules/:id` | Delete rule. |
+| GET | `/v1/alerts/events?ruleId=&status=` | List events (optional filters). |
+
+### Reports (Phase 6)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/reports/definitions` | Body: `{ "name", "description?", "dataSources", "filters?", "scheduleCron?", "deliveryChannels?", "format?", "isEnabled?" }`. |
+| GET | `/v1/reports/definitions` | List definitions. |
+| GET | `/v1/reports/definitions/:id` | Get definition. |
+| PUT | `/v1/reports/definitions/:id` | Update definition. |
+| DELETE | `/v1/reports/definitions/:id` | Delete definition. |
+| POST | `/v1/reports/definitions/:id/run` | Run report. Response: `{ "id", "status", "startedAt", "completedAt", "resultUrl", "error" }`. |
+| GET | `/v1/reports/definitions/:id/executions` | List executions. |
+
 ## Errors
 
 - **401:** Missing or invalid token → redirect to login.
@@ -82,4 +117,4 @@ Connect to `/ws` (same origin). After connection you can receive broadcast messa
 
 ---
 
-**Last updated:** 2026-03-09 (Phase 1 — no API changes)
+**Last updated:** 2026-03-09 (Phases 1–6: Access, AI, Session, Alert, Report)

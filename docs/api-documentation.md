@@ -199,6 +199,7 @@ Development: http://localhost:3000/v1
   {
     "id": "1",
     "name": "Super Admin",
+    "key": "super_admin",
     "permissions": [
       {
         "database": "*",
@@ -212,6 +213,7 @@ Development: http://localhost:3000/v1
   {
     "id": "2",
     "name": "Developer",
+    "key": "developer",
     "permissions": [
       {
         "database": "production",
