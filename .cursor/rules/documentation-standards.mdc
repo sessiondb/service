@@ -1,0 +1,42 @@
+---
+description: Tech docs and feature docs for every functionality
+alwaysApply: true
+---
+
+# Documentation Standards
+
+## Two Doc Types
+
+1. **Tech docs** — How the system works: architecture, APIs, data models, flows. Audience: developers. Location: `docs/` (e.g. `docs/api-documentation.md`, `docs/plans/*.md`, architecture diagrams).
+2. **Feature docs** — What a feature does and how to use it: user-/admin-facing behavior, configuration, examples. Audience: product, support, integrators. Location: `docs/features/` (e.g. `docs/features/access-control.md`, `docs/features/ai-query.md`).
+
+## Requirements
+
+- **Every functionality has documentation**: New features get at least one of: tech doc (if it changes architecture/APIs) or feature doc (if it’s user-facing). Prefer both when a feature has both implementation and usage aspects.
+- **Tech doc**: Update or add sections for new services, endpoints, models, and engine behavior. Keep API docs in sync with handlers.
+- **Feature doc**: Short purpose, how to use/configure, examples, and any limits or caveats.
+
+## Structure
+
+- **Tech**: `docs/` — `README.md` (index), `api-documentation.md`, `backend-requirements.md`, `plans/`, and any new architecture/design docs.
+- **Feature**: `docs/features/<feature-name>.md` — one file per major feature; link from main `docs/README.md`.
+
+## Example (feature doc)
+
+```markdown
+# Access Control (Column-to-Instance)
+
+## Purpose
+Control which users can read/write which databases, tables, and columns.
+
+## How it works
+Grants are stored as Permission records. The Access Engine checks them before query execution...
+
+## Configuration
+Instance-level: grant on instance. Table-level: set database, schema, table...
+
+## Limits
+Column-level enforcement uses DB GRANT where supported (Postgres, MySQL)...
+```
+
+When adding or changing functionality, add or update the relevant tech and/or feature doc.

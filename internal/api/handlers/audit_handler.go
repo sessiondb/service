@@ -3,6 +3,7 @@
 package handlers
 
 import (
+	"encoding/csv"
 	"net/http"
 	"sessiondb/internal/models"
 	"sessiondb/internal/repository"
@@ -85,4 +86,35 @@ func (h *AuditHandler) CreateLog(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"status": "success"})
+}
+
+// ExportLogs returns audit logs as CSV (premium feature; route is protected by FeatureGate("audit_logs_export")).
+func (h *AuditHandler) ExportLogs(c *gin.Context) {
+	logs, err := h.Service.GetLogs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Type", "text/csv")
+	c.Header("Content-Disposition", "attachment; filename=audit-logs.csv")
+	w := csv.NewWriter(c.Writer)
+	_ = w.Write([]string{"timestamp", "user", "session_user", "action", "resource", "table", "query", "status"})
+	for _, l := range logs {
+		userName := ""
+		if l.User.ID != uuid.Nil {
+			userName = l.User.Name
+		}
+		_ = w.Write([]string{
+			l.Timestamp.Format(time.RFC3339),
+			userName,
+			l.SessionUser,
+			l.Action,
+			l.Resource,
+			l.Table,
+			l.Query,
+			l.Status,
+		})
+	}
+	w.Flush()
 }

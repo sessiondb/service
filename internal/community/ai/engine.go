@@ -37,21 +37,42 @@ func NewEngine(
 	}
 }
 
-// GenerateSQL produces SQL from a natural-language prompt using the user's BYOK config and schema filtered by permissions.
+// getAIConfigForUser returns provider params for AI calls. Tries user config first, then global. useGlobal is true when global config was used.
+func (e *Engine) getAIConfigForUser(ctx context.Context, userID uuid.UUID) (providerType, apiKey, baseURL, modelName string, useGlobal bool, err error) {
+	uc, uerr := e.AIConfigRepo.GetUserAIConfig(userID)
+	if uerr == nil && uc != nil && uc.APIKey != "" {
+		dec, decErr := utils.DecryptPassword(uc.APIKey)
+		if decErr != nil {
+			return "", "", "", "", false, errInvalidAIConfig
+		}
+		base := ""
+		if uc.BaseURL != nil {
+			base = *uc.BaseURL
+		}
+		return uc.ProviderType, dec, base, uc.ModelName, false, nil
+	}
+	gc, gerr := e.AIConfigRepo.GetGlobalAIConfig()
+	if gerr != nil || gc == nil || gc.APIKey == "" {
+		return "", "", "", "", false, errNoAIConfig
+	}
+	dec, decErr := utils.DecryptPassword(gc.APIKey)
+	if decErr != nil {
+		return "", "", "", "", false, errInvalidAIConfig
+	}
+	base := ""
+	if gc.BaseURL != nil {
+		base = *gc.BaseURL
+	}
+	return gc.ProviderType, dec, base, gc.ModelName, true, nil
+}
+
+// GenerateSQL produces SQL from a natural-language prompt using the user's or global BYOK config and schema filtered by permissions.
 func (e *Engine) GenerateSQL(ctx context.Context, userID, instanceID uuid.UUID, prompt string, schema *engine.SchemaContext) (string, error) {
-	cfg, err := e.AIConfigRepo.GetUserAIConfig(userID)
-	if err != nil || cfg == nil {
-		return "", errNoAIConfig
-	}
-	apiKey, err := utils.DecryptPassword(cfg.APIKey)
+	_, apiKey, baseURL, modelName, _, err := e.getAIConfigForUser(ctx, userID)
 	if err != nil {
-		return "", errInvalidAIConfig
+		return "", err
 	}
-	baseURL := ""
-	if cfg.BaseURL != nil {
-		baseURL = *cfg.BaseURL
-	}
-	provider := NewOpenAICompatibleProvider(baseURL, apiKey, cfg.ModelName)
+	provider := NewOpenAICompatibleProvider(baseURL, apiKey, modelName)
 	if schema == nil {
 		schema, err = e.buildSchemaContext(ctx, userID, instanceID)
 		if err != nil {
@@ -79,21 +100,13 @@ func (e *Engine) ClassifyIntent(ctx context.Context, userID uuid.UUID, prompt st
 	return engine.IntentQuery, nil
 }
 
-// ExplainQuery returns a short explanation of the SQL using the user's BYOK config.
+// ExplainQuery returns a short explanation of the SQL using the user's or global BYOK config.
 func (e *Engine) ExplainQuery(ctx context.Context, userID uuid.UUID, query string) (string, error) {
-	cfg, err := e.AIConfigRepo.GetUserAIConfig(userID)
-	if err != nil || cfg == nil {
-		return "", errNoAIConfig
-	}
-	apiKey, err := utils.DecryptPassword(cfg.APIKey)
+	_, apiKey, baseURL, modelName, _, err := e.getAIConfigForUser(ctx, userID)
 	if err != nil {
-		return "", errInvalidAIConfig
+		return "", err
 	}
-	baseURL := ""
-	if cfg.BaseURL != nil {
-		baseURL = *cfg.BaseURL
-	}
-	provider := NewOpenAICompatibleProvider(baseURL, apiKey, cfg.ModelName)
+	provider := NewOpenAICompatibleProvider(baseURL, apiKey, modelName)
 	return provider.ExplainQuery(ctx, query)
 }
 

@@ -1,0 +1,45 @@
+---
+description: Premium features must be implemented under internal/premium/
+alwaysApply: true
+---
+
+# Premium Features: Use the Premium Folder
+
+Any **premium (pro)** feature in this project must be built under `internal/premium/`, not in the shared/community tree.
+
+## Where to Put What
+
+| What | Location |
+|------|----------|
+| Premium engines (session, alert, report) | `internal/premium/<feature>/` (e.g. `internal/premium/session/engine.go`) |
+| Premium repositories (pro-only CRUD) | `internal/premium/repository/` |
+| Premium handlers | `internal/premium/<feature>/handler.go` |
+| Premium services / utils stubs or impls | `internal/premium/service/`, `internal/premium/utils/` |
+
+## Rules
+
+- **Engines, handlers, and pro-only repos** for Session, Alert, Report (and any future premium feature) live under `internal/premium/`.
+- **Shared code** (models, migrations, community repos, engine *interfaces*) stays in `internal/models`, `internal/repository`, `internal/engine` — only the **implementations** that are pro-only go in `internal/premium/`.
+- All premium Go files must use `//go:build pro` so they compile only when building with `-tags pro`.
+- Wire premium routes and dependencies in `internal/api/provider_pro.go`; keep `internal/api/provider_community.go` as a no-op for community builds.
+
+## Examples
+
+```go
+// ✅ GOOD: premium session engine in premium folder
+// File: internal/premium/session/engine.go
+//go:build pro
+package session
+```
+
+```go
+// ✅ GOOD: premium-only repository in premium folder
+// File: internal/premium/repository/credential_session_repository.go
+//go:build pro
+package repository
+```
+
+```go
+// ❌ BAD: premium-only repository in community folder
+// File: internal/repository/credential_session_repository.go  // do not add pro-only repos here
+```

@@ -33,6 +33,23 @@ func ConnectDB(cfg *config.Config) {
 	log.Println("Connected to database")
 }
 
+// migrateRolesKey ensures roles.key exists and is backfilled before AutoMigrate (avoids NOT NULL on new column).
+func migrateRolesKey() {
+	// Skip if roles table does not exist yet (e.g. fresh install; AutoMigrate will create it).
+	var exists bool
+	if err := DB.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'roles')`).Scan(&exists).Error; err != nil || !exists {
+		return
+	}
+	// Rename db_key to key if present.
+	DB.Exec(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'roles' AND column_name = 'db_key') THEN ALTER TABLE roles RENAME COLUMN db_key TO key; END IF; END $$`)
+	// Add key column if missing (nullable so existing rows are valid).
+	DB.Exec(`ALTER TABLE roles ADD COLUMN IF NOT EXISTS key TEXT`)
+	// Backfill from name.
+	DB.Exec(`UPDATE roles SET key = LOWER(REPLACE(TRIM(name), ' ', '_')) WHERE key IS NULL OR key = ''`)
+	// Now safe to set NOT NULL so GORM's AutoMigrate won't try to add the column with NOT NULL.
+	DB.Exec(`ALTER TABLE roles ALTER COLUMN key SET NOT NULL`)
+}
+
 func Migrate() {
 	if DB == nil {
 		log.Fatal("Database not connected")
@@ -61,9 +78,8 @@ func Migrate() {
 		log.Printf("db_entities deduplication: removed %d duplicate rows", res.RowsAffected)
 	}
 
-	// Pre-migration: Ensure roles has db_key if it exists, or just populate it if it already failed half-way
-	DB.Exec(`ALTER TABLE roles ADD COLUMN IF NOT EXISTS db_key TEXT`)
-	DB.Exec(`UPDATE roles SET db_key = LOWER(REPLACE(name, ' ', '_')) WHERE db_key IS NULL`)
+	// Migrate roles.key BEFORE AutoMigrate so existing rows get backfilled (avoid NOT NULL on new column).
+	migrateRolesKey()
 
 	err := DB.AutoMigrate(
 		&models.User{},
@@ -83,7 +99,15 @@ func Migrate() {
 		&models.DBPrivilege{},
 		&models.DBRoleMembership{},
 		&models.UserAIConfig{},
+		&models.GlobalAIConfig{},
+		&models.AITokenUsage{},
 		&models.AIExecutionPolicy{},
+		&models.CredentialSession{},
+		&models.AlertRule{},
+		&models.AlertEvent{},
+		&models.ReportDefinition{},
+		&models.ReportExecution{},
+		&models.FeatureNotifyRequest{},
 	)
 	if err != nil {
 		log.Fatalf("Database migration failed: %v", err)
@@ -102,8 +126,8 @@ func Migrate() {
 
 func SeedRoles() {
 	roles := []struct {
-		Name  string
-		DBKey string
+		Name string
+		Key  string
 	}{
 		{"Super Admin", "super_admin"},
 		{"Developer", "developer"},
@@ -115,7 +139,7 @@ func SeedRoles() {
 		if count == 0 {
 			role := models.Role{
 				Name:         r.Name,
-				DBKey:        r.DBKey,
+				Key:          r.Key,
 				Description:  "Default role",
 				IsSystemRole: true,
 			}

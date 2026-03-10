@@ -199,6 +199,7 @@ Development: http://localhost:3000/v1
   {
     "id": "1",
     "name": "Super Admin",
+    "key": "super_admin",
     "permissions": [
       {
         "database": "*",
@@ -212,6 +213,7 @@ Development: http://localhost:3000/v1
   {
     "id": "2",
     "name": "Developer",
+    "key": "developer",
     "permissions": [
       {
         "database": "production",
@@ -341,6 +343,33 @@ Development: http://localhost:3000/v1
   "action": "VIEW_PAGE",
   "resource": "Audit Logs",
   "status": "Success"
+}
+```
+
+### Register for feature notification (waitlist)
+**Endpoint**: `POST /notify-me` (protected)
+
+Registers the current user to be notified when a roadmap feature is ready. Email is taken from the JWT.
+
+**Request**:
+```json
+{
+  "featureKey": "sessions"
+}
+```
+
+**Response** (201 Created):
+```json
+{
+  "message": "Thanks! We'll notify you when this feature is ready.",
+  "requestId": "uuid"
+}
+```
+
+**Response** (200 OK, already registered):
+```json
+{
+  "message": "You're already on the list. We'll notify you when this feature is ready."
 }
 ```
 

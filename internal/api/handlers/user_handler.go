@@ -14,20 +14,22 @@ import (
 type UserHandler struct {
 	Service     *service.UserService
 	RoleService *service.RoleService
+	MailService *service.MailService
 }
 
-func NewUserHandler(service *service.UserService, roleService *service.RoleService) *UserHandler {
-	return &UserHandler{Service: service, RoleService: roleService}
+func NewUserHandler(svc *service.UserService, roleService *service.RoleService, mailService *service.MailService) *UserHandler {
+	return &UserHandler{Service: svc, RoleService: roleService, MailService: mailService}
 }
 
 type CreateUserRequest struct {
-	Name           string              `json:"name" binding:"required"`
-	Email          string              `json:"email"`                   // Made optional for frontend compatibility
-	Password       string              `json:"password"`                // Made optional, will generate default if missing
-	Role           string              `json:"role" binding:"required"` // Role name
-	Status         string              `json:"status"`
-	IsSessionBased bool                `json:"isSessionBased"`
-	Permissions    []models.Permission `json:"permissions"`
+	Name                   string              `json:"name" binding:"required"`
+	Email                  string              `json:"email"`
+	Password               string              `json:"password"`
+	Role                   string              `json:"role" binding:"required"`
+	Status                 string              `json:"status"`
+	IsSessionBased         bool                `json:"isSessionBased"`
+	Permissions            []models.Permission  `json:"permissions"`
+	SendCredentialsEmail   bool                `json:"sendCredentialsEmail"`
 }
 
 type UpdateUserRequest struct {
@@ -93,6 +95,23 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
+	emailSent := false
+	if req.SendCredentialsEmail && h.MailService != nil {
+		loginURL := ""
+		if h.MailService.Config != nil {
+			loginURL = h.MailService.Config.Mail.AppURL
+		}
+		if err := h.MailService.SendCredentialsEmail(createdUser.Email, createdUser.Name, req.Password, loginURL); err != nil {
+			c.JSON(http.StatusCreated, gin.H{"data": createdUser, "emailSent": false, "emailError": "Failed to send email"})
+			return
+		}
+		emailSent = true
+	}
+
+	if req.SendCredentialsEmail {
+		c.JSON(http.StatusCreated, gin.H{"data": createdUser, "emailSent": emailSent})
+		return
+	}
 	c.JSON(http.StatusCreated, createdUser)
 }
 

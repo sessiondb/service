@@ -21,13 +21,17 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// OnQueryExecutedHook is called after a query execution (e.g. for AlertEngine.EvaluateRules). Optional; premium only.
+type OnQueryExecutedHook func(ctx context.Context, eventSource string, payload map[string]interface{})
+
 type QueryService struct {
-	QueryRepo      *repository.QueryRepository
-	InstanceRepo   *repository.InstanceRepository
-	DBUserCredRepo *repository.DBUserCredentialRepository
-	AuditService   *AuditService
-	AccessEngine   engine.AccessEngine // optional: when set, enforces data access before execution
-	Config         *config.Config
+	QueryRepo        *repository.QueryRepository
+	InstanceRepo     *repository.InstanceRepository
+	DBUserCredRepo   *repository.DBUserCredentialRepository
+	AuditService     *AuditService
+	AccessEngine     engine.AccessEngine // optional: when set, enforces data access before execution
+	Config           *config.Config
+	OnQueryExecuted  OnQueryExecutedHook // optional: when set (e.g. pro), alert engine can evaluate rules
 }
 
 func NewQueryService(queryRepo *repository.QueryRepository, cfg *config.Config) *QueryService {
@@ -55,6 +59,11 @@ func (s *QueryService) SetDBUserCredRepo(repo *repository.DBUserCredentialReposi
 // SetAccessEngine sets the optional AccessEngine for data-level access checks before query execution.
 func (s *QueryService) SetAccessEngine(ae engine.AccessEngine) {
 	s.AccessEngine = ae
+}
+
+// SetOnQueryExecuted sets the optional hook called after each query execution (e.g. for premium alert evaluation).
+func (s *QueryService) SetOnQueryExecuted(hook OnQueryExecutedHook) {
+	s.OnQueryExecuted = hook
 }
 
 func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, query, ipAddress, userAgent string) (interface{}, error) {
@@ -135,6 +144,18 @@ func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, quer
 	} else {
 		// Fallback logging if service not injected (shouldn't happen in prod)
 		fmt.Printf("WARNING: AuditService not injected into QueryService\n")
+	}
+
+	// Optional: fire alert evaluation (premium) after query execution
+	if s.OnQueryExecuted != nil {
+		payload := map[string]interface{}{
+			"duration_ms":   duration,
+			"user_id":       userID.String(),
+			"instance_id":   instanceID.String(),
+			"instance_name": instance.Name,
+			"status":        status,
+		}
+		go s.OnQueryExecuted(context.Background(), "query_execution", payload)
 	}
 
 	if err != nil {

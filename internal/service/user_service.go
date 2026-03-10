@@ -29,8 +29,9 @@ func NewUserService(
 	}
 }
 
+// Create creates a platform user and auto-provisions DB users on all instances.
+// "Existing user" means a platform user with the same email already exists; in that case we return "email already in use".
 func (s *UserService) Create(user *models.User, password string) (*models.User, error) {
-	// Check if user exists
 	if _, err := s.UserRepo.FindByEmail(user.Email); err == nil {
 		return nil, errors.New("email already in use")
 	}
@@ -45,11 +46,10 @@ func (s *UserService) Create(user *models.User, password string) (*models.User, 
 		return nil, err
 	}
 
-	// Auto-provision DB users on all instances
+	// Auto-provision DB users on all instances: create a DB user when none exists for that user–instance pair (no catalog crawl).
 	instances, err := s.InstanceRepo.FindAll()
 	if err == nil && len(instances) > 0 {
 		for _, instance := range instances {
-			// Provision DB user
 			cred, err := s.ProvisioningService.ProvisionDBUser(user, &instance)
 			if err != nil {
 				// Log error but don't fail user creation

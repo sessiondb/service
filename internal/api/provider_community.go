@@ -12,7 +12,8 @@ import (
 
 // RegisterPremiumRoutes acts as a no-op safety net for the Community Edition.
 // Since the 'pro' build tag is absent, this file is loaded instead of the pro provider.
-func RegisterPremiumRoutes(router *gin.RouterGroup) {
+func RegisterPremiumRoutes(router *gin.RouterGroup, deps *PremiumDeps) {
 	log.Println("[INFO] Community Edition loaded. Premium routes are disabled.")
+	_ = deps
 	// Do nothing. This ensures the Go program cleanly compiles.
 }

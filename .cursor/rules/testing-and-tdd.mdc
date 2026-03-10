@@ -1,0 +1,50 @@
+---
+description: TDD, unit tests, and test coverage for every functionality
+alwaysApply: true
+---
+
+# Testing & TDD
+
+## TDD Workflow
+
+1. **Red**: Write a failing test first (unit or integration) that defines the desired behavior.
+2. **Green**: Implement the minimum code to make the test pass.
+3. **Refactor**: Clean up without changing behavior; keep tests green.
+
+Do not add new production code for a feature without at least one test that exercises it.
+
+## Requirements
+
+- **Every functionality has unit tests**: Each exported function or meaningful code path should have a corresponding test in `*_test.go` (same package or `_test` package for black-box).
+- **Test file location**: Place tests next to code: `user_service.go` → `user_service_test.go`, or in a `test` package for integration tests.
+- Use **table-driven tests** in Go where multiple inputs are needed; avoid duplication.
+- Prefer **test helpers** and fixtures for setup (e.g. in-memory DB, mock repositories) so tests stay readable.
+
+## Example
+
+```go
+// user_service_test.go
+func TestCreateUser_Success(t *testing.T) {
+    repo := newMockUserRepo()
+    svc := NewUserService(repo)
+    got, err := svc.CreateUser(context.Background(), CreateUserInput{Email: "a@b.com", Name: "Alice"})
+    if err != nil {
+        t.Fatalf("unexpected error: %v", err)
+    }
+    if got.Email != "a@b.com" {
+        t.Errorf("got email %q", got.Email)
+    }
+}
+
+func TestCreateUser_DuplicateEmail(t *testing.T) {
+    repo := newMockUserRepo()
+    repo.createErr = ErrDuplicateEmail
+    svc := NewUserService(repo)
+    _, err := svc.CreateUser(context.Background(), CreateUserInput{Email: "a@b.com"})
+    if err == nil {
+        t.Fatal("expected error for duplicate email")
+    }
+}
+```
+
+Run tests before claiming a feature is done: `go test ./...`

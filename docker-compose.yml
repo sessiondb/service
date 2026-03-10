@@ -2,7 +2,10 @@
 
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        BUILD_TAGS: ${BUILD_TAGS:-}  # BUILD_TAGS=pro for premium; unset = community
     ports:
       - "8080:8080"
     environment:

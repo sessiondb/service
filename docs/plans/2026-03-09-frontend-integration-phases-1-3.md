@@ -1,14 +1,14 @@
-# Frontend Integration (Phases 1–3) Implementation Plan
+# Frontend Integration (Phases 1–6) Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Integrate the backend behavior from Phases 1–3 (Dialect Layer, Access Engine, AI BYOK) into the SessionDB UI so the app correctly uses existing APIs, handles new errors, and adds AI config and generate/explain flows. The plan is structured so that when later phases (e.g. Session Engine, Alerting, Reporting) land, the same patterns can be reused.
+**Goal:** Integrate all backend features (Phases 1–6) into the SessionDB UI: Dialect Layer, Access Engine, AI BYOK (Phases 1–3), Session Engine (Phase 4), Alert Engine (Phase 5), and Report Engine (Phase 6). The UI should use the shared API client, handle backend errors consistently, and add screens for AI config, sessions, alerts, and reports.
 
-**Architecture:** The UI is assumed to be a React 18 + TypeScript app (Vite, React Router, Context for state). Integration is done by: (1) centralizing API calls and error handling, (2) handling Phase 2’s 403 “no data access” on query execute, (3) adding AI API client and screens for config, generate-SQL, and explain. All paths below are relative to the **UI project root** (your React app—e.g. a `frontend/` folder in this repo or a separate repo).
+**Architecture:** The UI is assumed to be a React 18 + TypeScript app (Vite, React Router, Context for state). Integration is done by: (1) centralizing API calls and error handling, (2) handling Phase 2’s 403 “no data access” on query execute, (3) adding AI and premium API modules and feature screens. All paths below are relative to the **UI project root** (e.g. `frontend/` in this repo or a separate repo).
 
-**Tech Stack:** React 18, TypeScript, Vite, React Router v6, fetch or axios (per project rules: use axios), JWT in `Authorization: Bearer <token>`.
+**Tech Stack:** React 18, TypeScript, Vite, React Router v6, axios (per project rules), JWT in `Authorization: Bearer <token>`.
 
-**Reference:** Backend contract and error shapes are in `docs/frontend-integration.md` (this repo).
+**Reference:** Backend contract and error shapes: `docs/frontend-integration.md`. Premium endpoints (Session, Alert, Report) are available when the backend is built with `-tags pro`.
 
 ---
 
@@ -290,7 +290,7 @@ git commit -m "feat(ui): send instanceId for data permissions (Phase 2)"
 
 ---
 
-## Task 8: Document and future phases
+## Task 8: Document backend integration
 
 **Files:**
 - Create or modify: `docs/README.md` or `FRONTEND.md` in the UI repo
@@ -300,13 +300,141 @@ git commit -m "feat(ui): send instanceId for data permissions (Phase 2)"
 - Point to the backend’s `docs/frontend-integration.md` for base URL, auth, and all endpoints.
 - Note that 403 with code `AUTH002` means “no data access to this instance” (Phase 2).
 - List the AI endpoints and that AI features require the user to set API config first (Phase 3).
-- Add one line: “When new backend phases (e.g. Session Engine, Alerting, Reporting) are completed, add corresponding API client functions and screens following the same patterns (api module, error handling, settings/feature screens).”
+- Note that Session, Alert, and Report endpoints (Phases 4–6) are available when the backend is built with `-tags pro`.
 
 **Step 2: Commit**
 
 ```bash
 git add docs/README.md
-git commit -m "docs: backend integration and future phases"
+git commit -m "docs: backend integration (Phases 1–6)"
+```
+
+---
+
+## Task 9: Session API client and UI (Phase 4 — premium)
+
+**Files:**
+- Create: `src/api/session.ts`
+- Create or modify: A page or section for "Sessions" (e.g. `src/pages/Sessions.tsx` or within the Query/Instance flow)
+
+**Backend endpoints (under `/v1`, protected):**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/sessions/start` | Start ephemeral session. Body: `{ instanceId: string, ttlMinutes?: number }`. Response: `{ sessionId, dbUsername, password, expiresAt }`. |
+| POST | `/v1/sessions/:id/end` | End session. Response: 204. |
+| GET | `/v1/sessions/active?instanceId=<uuid>` | Get active session for user on instance. Response: `{ active: true, sessionId, dbUsername, expiresAt }` or `{ active: false }`. |
+
+**Step 1: Create session API client**
+
+```typescript
+// src/api/session.ts
+import { api } from './client';
+
+export type StartSessionResponse = { sessionId: string; dbUsername: string; password: string; expiresAt: string };
+export type ActiveSessionResponse =
+  | { active: true; sessionId: string; dbUsername: string; expiresAt: string }
+  | { active: false };
+
+export async function startSession(instanceId: string, ttlMinutes?: number): Promise<StartSessionResponse> {
+  const { data } = await api.post<StartSessionResponse>('/sessions/start', { instanceId, ttlMinutes });
+  return data;
+}
+
+export async function endSession(sessionId: string): Promise<void> {
+  await api.post(`/sessions/${sessionId}/end`);
+}
+
+export async function getActiveSession(instanceId: string): Promise<ActiveSessionResponse> {
+  const { data } = await api.get<ActiveSessionResponse>('/sessions/active', { params: { instanceId } });
+  return data;
+}
+```
+
+**Step 2: Add Session UI**
+
+- From the query page or instance list: allow "Start session" for an instance (calls `startSession(instanceId)`). Show the returned `password` once (user must copy it); show `dbUsername` and `expiresAt`.
+- Show "Active session" state when `getActiveSession(instanceId)` returns `active: true`; provide "End session" that calls `endSession(sessionId)`.
+- Handle 403 (e.g. `CodeForbidden`) when ending another user's session; use `getApiErrorMessage` / `getApiErrorCode` for errors.
+
+**Step 3: Commit**
+
+```bash
+git add src/api/session.ts src/pages/Sessions.tsx
+git commit -m "feat(ui): Session API and UI (Phase 4)"
+```
+
+---
+
+## Task 10: Alert API client and UI (Phase 5 — premium)
+
+**Files:**
+- Create: `src/api/alerts.ts`
+- Create: `src/pages/Alerts.tsx` (or `src/pages/Settings/Alerts.tsx`)
+
+**Backend endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/alerts/rules` | Create rule. Body: `{ name, description?, eventSource, condition, severity?, isEnabled?, channels? }`. `condition` is JSON (e.g. `{ metric: "duration_ms", op: ">", value: 5000 }`). |
+| GET | `/v1/alerts/rules` | List rules. |
+| GET | `/v1/alerts/rules/:id` | Get rule. |
+| PUT | `/v1/alerts/rules/:id` | Update rule. |
+| DELETE | `/v1/alerts/rules/:id` | Delete rule. |
+| GET | `/v1/alerts/events?ruleId=&status=` | List events (optional filters). |
+
+**Step 1: Create alerts API client**
+
+- Types: `AlertRule`, `AlertEvent` (ids, name, eventSource, condition, severity, isEnabled, title, description, status, etc.).
+- Functions: `getAlertRules()`, `getAlertRule(id)`, `createAlertRule(body)`, `updateAlertRule(id, body)`, `deleteAlertRule(id)`, `getAlertEvents(params?)`.
+
+**Step 2: Add Alerts UI**
+
+- **Rules:** List rules; add form to create/edit (name, description, eventSource e.g. `query_execution`, condition as JSON or structured fields e.g. metric + op + value for threshold, severity, enabled). Delete with confirmation.
+- **Events:** List recent alert events (rule, title, severity, status, time). Optional: filter by ruleId or status (open/acknowledged/resolved).
+
+**Step 3: Commit**
+
+```bash
+git add src/api/alerts.ts src/pages/Alerts.tsx
+git commit -m "feat(ui): Alert API and UI (Phase 5)"
+```
+
+---
+
+## Task 11: Report API client and UI (Phase 6 — premium)
+
+**Files:**
+- Create: `src/api/reports.ts`
+- Create: `src/pages/Reports.tsx` (or under Settings)
+
+**Backend endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/reports/definitions` | Create definition. Body: `{ name, description?, dataSources, filters?, scheduleCron?, deliveryChannels?, format?, isEnabled? }`. JSONB fields as JSON. |
+| GET | `/v1/reports/definitions` | List definitions. |
+| GET | `/v1/reports/definitions/:id` | Get definition. |
+| PUT | `/v1/reports/definitions/:id` | Update definition. |
+| DELETE | `/v1/reports/definitions/:id` | Delete definition. |
+| POST | `/v1/reports/definitions/:id/run` | Run report. Response: `ReportExecution` (id, status, startedAt, completedAt, resultUrl, error). |
+| GET | `/v1/reports/definitions/:id/executions` | List executions for a definition. |
+
+**Step 1: Create reports API client**
+
+- Types: `ReportDefinition`, `ReportExecution` (ids, name, format, status, startedAt, completedAt, resultUrl, etc.).
+- Functions: `getReportDefinitions()`, `getReportDefinition(id)`, `createReportDefinition(body)`, `updateReportDefinition(id, body)`, `deleteReportDefinition(id)`, `runReport(definitionId)`, `getReportExecutions(definitionId)`.
+
+**Step 2: Add Reports UI**
+
+- **Definitions:** List report definitions; add form to create/edit (name, description, dataSources as JSON or structured UI, format csv/json, schedule optional, enabled). Delete with confirmation.
+- **Run:** For each definition, "Run now" button that calls `runReport(id)`; show execution status (running/completed/failed). List recent executions with link to `resultUrl` when present.
+
+**Step 3: Commit**
+
+```bash
+git add src/api/reports.ts src/pages/Reports.tsx
+git commit -m "feat(ui): Report API and UI (Phase 6)"
 ```
 
 ---
@@ -322,18 +450,23 @@ git commit -m "docs: backend integration and future phases"
 | 5 | “Generate with AI” in query UI using selected instance |
 | 6 | “Explain” in query UI |
 | 7 | (Optional) instanceId in permission payloads for user/role |
-| 8 | Docs: link to frontend-integration.md and note for future phases |
+| 8 | Docs: link to frontend-integration.md and Phases 4–6 note |
+| 9 | Session API + UI (start/end session, active session) |
+| 10 | Alert API + UI (rules CRUD, events list) |
+| 11 | Report API + UI (definitions CRUD, run, executions list) |
 
 ---
 
 ## Testing
 
-- **Manual:** Run backend (`go run ./cmd/server` or Docker) and UI (`npm run dev`). Log in, open query page, run a query; revoke data access for that instance (or use a user with no instance permissions) and confirm 403 message. Configure AI in settings, then use “Generate with AI” and “Explain” and confirm requests and responses match `docs/frontend-integration.md`.
+- **Manual:** Run backend (`go run ./cmd/server` or `go build -tags pro ./cmd/server` for premium; or Docker) and UI (`npm run dev`). Log in, open query page, run a query; revoke data access for that instance (or use a user with no instance permissions) and confirm 403 message. Configure AI in settings, then use “Generate with AI” and “Explain” and confirm requests and responses match `docs/frontend-integration.md`. For premium (pro build): test session start/end, alert rules CRUD and events, report definitions CRUD and run.
 - **E2E (if present):** Add or extend a test that calls the API client and asserts on 403 and AI response shapes.
 
 ---
 
-## When later phases land
+## Premium features (Phases 4–6)
 
-- Add new API modules (e.g. `src/api/session.ts`, `src/api/alerts.ts`, `src/api/reports.ts`) and new routes/pages as needed.
-- Reuse the same `api` client, `getApiErrorMessage` / `getApiErrorCode`, and the pattern: feature screen → API call → success/error handling.
+- **Session (Task 9):** `src/api/session.ts` + Sessions page: start session (instanceId, optional ttlMinutes), end session, show active session per instance.
+- **Alerts (Task 10):** `src/api/alerts.ts` + Alerts page: CRUD rules (eventSource, condition JSON e.g. threshold), list/filter events.
+- **Reports (Task 11):** `src/api/reports.ts` + Reports page: CRUD definitions, run report, list executions and resultUrl.
+- Reuse the same `api` client, `getApiErrorMessage` / `getApiErrorCode`, and the pattern: feature screen → API call → success/error handling. If the backend is built without `-tags pro`, these endpoints return 404; handle gracefully (e.g. hide premium nav or show "Premium feature" message).
