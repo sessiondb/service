@@ -1,0 +1,39 @@
+---
+description: Go code standards, design patterns, and system design practices
+globs: "**/*.go"
+alwaysApply: false
+---
+
+# Go Standards & Design Patterns
+
+## Code Standards
+
+- Prefer **functions over types/classes** for new features; avoid adding new struct types for single-responsibility logic.
+- Use **interfaces** for abstractions (e.g. `DatabaseDialect`, `AIProvider`) so implementations are swappable and testable.
+- **JSDoc-style comments**: Document every exported function with a short description, `@param` for arguments, `@return` for return values. Use `//` for Go (e.g. `// DoSomething does X. Params: ctx, id. Returns: result, error`).
+- Use **axios** for HTTP calls; do not use `request`. Prefer `context.Context` as first parameter for cancellation and timeouts.
+- Handle errors explicitly; wrap with `fmt.Errorf("...: %w", err)` when adding context. Never swallow errors.
+
+## Design Patterns to Follow
+
+- **Dependency injection**: Pass repositories and services into handlers/services via constructors; avoid global state.
+- **Interface segregation**: Small, focused interfaces (e.g. `UserReader`, `UserWriter`) over one large interface when it improves clarity.
+- **Strategy / pluggable behavior**: Use interfaces for dialect, AI provider, notification channel so new implementations are additive (one new file per implementation).
+- **Repository pattern**: Data access behind repository interfaces; business logic stays in services.
+
+## Example
+
+```go
+// ✅ GOOD: interface for abstraction, func with clear docs
+// ValidateAccess checks if user has required permission for the resource.
+// Params: ctx, userID, resourceType, resourceID. Returns: allowed (bool), error.
+func ValidateAccess(ctx context.Context, userID uuid.UUID, resourceType, resourceID string) (bool, error) {
+    // ...
+}
+
+// ❌ BAD: silent error, no docs
+func doThing(id string) (x string, err error) {
+    if e := db.Save(); e != nil { return }
+    return x, nil
+}
+```
