@@ -49,7 +49,7 @@ publish_community_docker:
     # --- STEP 3: CREATE GITHUB RELEASE ---
     # This creates the 'Release' UI on GitHub with the 'Pre-release' badge
     - export GITHUB_TOKEN=$GH_TOKEN
-    - 'gh release create $CI_COMMIT_TAG --repo sessiondb/service.git --title "SessionDB $CI_COMMIT_TAG (Beta)" --notes "Community Edition Beta Release. Docker Image available at: $DOCKER_HUB_USER/sessiondb-ui:$CI_COMMIT_TAG" --prerelease'
+    - 'gh release create $CI_COMMIT_TAG --repo sessiondb/service --title "SessionDB BE $CI_COMMIT_TAG" --notes "Community Edition. Docker Image: $DOCKER_HUB_USER/sessiondb-be:$CI_COMMIT_TAG"'
     # --- STEP 4: DOCKER BUILD & PUSH ---
     - export IMAGE_TAG=$CI_COMMIT_TAG
     - docker build -t $DOCKER_HUB_USER/sessiondb-be:$IMAGE_TAG .
@@ -57,4 +57,4 @@ publish_community_docker:
     - docker push $DOCKER_HUB_USER/sessiondb-be:$IMAGE_TAG
     - docker push $DOCKER_HUB_USER/sessiondb-be:latest
 
-    # https://github.com/sessiondb/service.git
+    # GitHub repo: sessiondb/service

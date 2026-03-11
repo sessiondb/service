@@ -17,7 +17,7 @@ const mysqlUserHostFmt = "'%s'@'%s'"
 
 type MySQLDialect struct{}
 
-func (d *MySQLDialect) Type() string        { return "mysql" }
+func (d *MySQLDialect) Type() string       { return "mysql" }
 func (d *MySQLDialect) DriverName() string { return "mysql" }
 
 func (d *MySQLDialect) BuildDSN(instance *models.DBInstance, dbName string) string {
@@ -33,8 +33,12 @@ func (d *MySQLDialect) BuildAdminDSN(instance *models.DBInstance) string {
 		instance.Username, instance.Password, instance.Host, instance.Port)
 }
 
+// BuildDSNForUser builds a DSN with the given username and password. User and password are
+// URL-encoded so special characters (@ : / etc.) do not break the connection string.
 func (d *MySQLDialect) BuildDSNForUser(instance *models.DBInstance, dbName, username, password string) string {
-	base := fmt.Sprintf("%s:%s@tcp(%s:%d)/", username, password, instance.Host, instance.Port)
+	validUser := strings.Split(username, "@")[0]
+	validUser = strings.Trim(validUser, "'\"")
+	base := fmt.Sprintf("%s:%s@tcp(%s:%d)/", validUser, password, instance.Host, instance.Port)
 	if dbName != "" {
 		return base + dbName + "?parseTime=true"
 	}

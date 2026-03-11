@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"sessiondb/internal/apierrors"
+	"sessiondb/internal/dialect"
 	"sessiondb/internal/models"
 	"sessiondb/internal/repository"
 	"sessiondb/internal/service"
@@ -330,27 +331,22 @@ func (h *DBUserHandler) VerifyCredentials(c *gin.Context) {
 		return
 	}
 
-	// Try to connect using the provided credentials
-	dsn := ""
-	if instance.Type == "postgres" {
-		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s sslmode=disable",
-			instance.Host, instance.Port, cred.DBUsername, req.DBPassword)
-	} else if instance.Type == "mysql" {
-		cleanUser := cred.DBUsername
-		if strings.Contains(cleanUser, "@") {
-			cleanUser = strings.Split(cleanUser, "@")[0]
-			cleanUser = strings.Trim(cleanUser, "'\"")
-		}
-		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/",
-			cleanUser, req.DBPassword, instance.Host, instance.Port)
-	} else {
+	d, err := dialect.GetDialect(instance.Type)
+	if err != nil {
 		apierrors.Respond(c, apierrors.NewAppError(http.StatusBadRequest, apierrors.CodeInvalidRequest, "Unsupported database engine"))
 		return
 	}
 
-	driverName := instance.Type
+	// Build DSN with proper encoding for special chars in username/password (same as query execution path)
+	cleanUser := cred.DBUsername
+	if instance.Type == "mysql" && strings.Contains(cleanUser, "@") {
+		cleanUser = strings.Split(cleanUser, "@")[0]
+		cleanUser = strings.Trim(cleanUser, "'\"")
+	}
+	dsn := d.BuildDSNForUser(instance, "", cleanUser, req.DBPassword)
+	driverName := d.DriverName()
 
-	// Create temporary connection purely to ping
+	// Create temporary connection purely to verify credentials
 	db, err := sql.Open(driverName, dsn)
 	if err == nil {
 		err = db.Ping()
@@ -358,8 +354,12 @@ func (h *DBUserHandler) VerifyCredentials(c *gin.Context) {
 	}
 
 	if err != nil {
-		// Log the underlying database error if needed, but return generic invalid credentials code
-		apierrors.Respond(c, apierrors.ErrUserCredsInvalid)
+		// Only treat auth-like errors as invalid credentials; others (e.g. network) surface as connection error
+		if isAuthError(err) {
+			apierrors.Respond(c, apierrors.ErrUserCredsInvalid)
+			return
+		}
+		apierrors.Respond(c, apierrors.NewAppError(http.StatusBadRequest, apierrors.CodeInvalidRequest, "Could not connect to database: "+err.Error()))
 		return
 	}
 
@@ -378,4 +378,14 @@ func (h *DBUserHandler) VerifyCredentials(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Credentials verified and saved successfully"})
+}
+
+// isAuthError reports whether the error is a DB authentication/access-denied error.
+func isAuthError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "access denied") ||
+		strings.Contains(msg, "password authentication failed") ||
+		strings.Contains(msg, "authentication failed") ||
+		strings.Contains(msg, "invalid password") ||
+		strings.Contains(msg, "error 1045")
 }
