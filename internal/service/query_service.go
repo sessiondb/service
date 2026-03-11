@@ -25,13 +25,13 @@ import (
 type OnQueryExecutedHook func(ctx context.Context, eventSource string, payload map[string]interface{})
 
 type QueryService struct {
-	QueryRepo        *repository.QueryRepository
-	InstanceRepo     *repository.InstanceRepository
-	DBUserCredRepo   *repository.DBUserCredentialRepository
-	AuditService     *AuditService
-	AccessEngine     engine.AccessEngine // optional: when set, enforces data access before execution
-	Config           *config.Config
-	OnQueryExecuted  OnQueryExecutedHook // optional: when set (e.g. pro), alert engine can evaluate rules
+	QueryRepo       *repository.QueryRepository
+	InstanceRepo    *repository.InstanceRepository
+	DBUserCredRepo  *repository.DBUserCredentialRepository
+	AuditService    *AuditService
+	AccessEngine    engine.AccessEngine // optional: when set, enforces data access before execution
+	Config          *config.Config
+	OnQueryExecuted OnQueryExecutedHook // optional: when set (e.g. pro), alert engine can evaluate rules
 }
 
 func NewQueryService(queryRepo *repository.QueryRepository, cfg *config.Config) *QueryService {
@@ -95,10 +95,10 @@ func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, quer
 			// No user credential found — return specific error code
 			return nil, apierrors.ErrUserCredsReq
 		}
-		// Decrypt the stored password
+		// Decrypt the stored password (fails if encryption key changed or data corrupted)
 		plainPass, decErr := utils.DecryptPassword(cred.DBPassword)
 		if decErr != nil {
-			return nil, apierrors.ErrUserCredsInvalid
+			return nil, apierrors.ErrUserCredsDecrypt
 		}
 		dbUser = cred.DBUsername
 		dbPass = plainPass
@@ -112,14 +112,14 @@ func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, quer
 	dsn := d.BuildDSNForUser(instance, "", dbUser, dbPass)
 	db, err := sql.Open(d.DriverName(), dsn)
 	if err != nil {
-		if usingUserCreds {
+		if usingUserCreds && isAuthError(err) {
 			return nil, apierrors.ErrUserCredsInvalid
 		}
 		return nil, fmt.Errorf("failed to connect: %w", err)
 	}
 	defer db.Close()
 
-	// Verify connection — catches auth failures
+	// Verify connection — catches auth failures (Open often defers real connect to Ping)
 	if err := db.Ping(); err != nil {
 		if usingUserCreds && isAuthError(err) {
 			return nil, apierrors.ErrUserCredsInvalid
@@ -229,5 +229,6 @@ func isAuthError(err error) bool {
 	return strings.Contains(msg, "access denied") ||
 		strings.Contains(msg, "password authentication failed") ||
 		strings.Contains(msg, "authentication failed") ||
-		strings.Contains(msg, "invalid password")
+		strings.Contains(msg, "invalid password") ||
+		strings.Contains(msg, "error 1045") // MySQL access denied
 }

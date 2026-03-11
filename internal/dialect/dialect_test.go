@@ -3,6 +3,7 @@
 package dialect
 
 import (
+	"strings"
 	"sessiondb/internal/models"
 	"testing"
 )
@@ -115,6 +116,29 @@ func TestMySQLDialect_SQL(t *testing.T) {
 	if revokeAll != "REVOKE ALL PRIVILEGES ON *.* FROM 'jane'@'%'" {
 		t.Errorf("RevokeAllSQL = %q", revokeAll)
 	}
+}
+
+// TestMySQLDialect_BuildDSNForUser_normalizeUsername ensures 'user'@'%' is normalized to short name for DSN.
+func TestMySQLDialect_BuildDSNForUser_normalizeUsername(t *testing.T) {
+	d := &MySQLDialect{}
+	inst := &models.DBInstance{Host: "localhost", Port: 3306}
+
+	// MySQL stores usernames as 'mouli'@'%'; DSN must use short name only
+	dsn := d.BuildDSNForUser(inst, "", "'mouli'@'%'", "secret")
+	if dsn != "mouli:secret@tcp(localhost:3306)/?parseTime=true" {
+		t.Errorf("BuildDSNForUser with 'mouli'@'%%' = %q, want short username in DSN", dsn)
+	}
+
+	// Password with special chars is URL-encoded
+	dsn2 := d.BuildDSNForUser(inst, "mydb", "mouli", "p@ss#word")
+	if !contains(t, dsn2, "mouli:") || !contains(t, dsn2, "@tcp(localhost:3306)/mydb") {
+		t.Errorf("BuildDSNForUser with special chars in password = %q", dsn2)
+	}
+}
+
+func contains(t *testing.T, s, sub string) bool {
+	t.Helper()
+	return strings.Contains(s, sub)
 }
 
 func TestPostgresDialect_FetchDatabases_NoDB(t *testing.T) {
