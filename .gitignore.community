@@ -1,3 +1,0 @@
-# Community Edition Git Ignore
-# Exclude the premium features logic so it is not synced to community repos.
-internal/premium/
