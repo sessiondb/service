@@ -49,6 +49,16 @@ func (r *RoleRepository) FindByName(name string) (*models.Role, error) {
 	return &role, nil
 }
 
+// FindByKey returns the role with the given key (e.g. "super_admin").
+func (r *RoleRepository) FindByKey(key string) (*models.Role, error) {
+	var role models.Role
+	err := r.DB.Where("key = ?", key).First(&role).Error
+	if err != nil {
+		return nil, err
+	}
+	return &role, nil
+}
+
 func (r *RoleRepository) Delete(id uuid.UUID) error {
 	return r.DB.Delete(&models.Role{}, id).Error
 }
