@@ -76,7 +76,7 @@ func main() {
 	provisioningService := service.NewDBUserProvisioningService(dbUserCredRepo, instanceRepo)
 	userService := service.NewUserService(userRepo, provisioningService, instanceRepo)
 	configService := service.NewConfigService()
-	approvalService := service.NewApprovalService(approvalRepo)
+	approvalService := service.NewApprovalService(approvalRepo, permRepo, provisioningService, instanceRepo, userRepo)
 	queryService := service.NewQueryService(queryRepo, cfg)
 	queryService.SetInstanceRepo(instanceRepo)     // Inject instance repo for query execution
 	queryService.SetAuditService(auditService)     // Inject audit service for history logging
