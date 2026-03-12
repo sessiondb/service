@@ -1,0 +1,16 @@
+[server]
+port = "8080"
+mode = "debug"
+
+[auth]
+# Optional: JWT defaults could go here later
+
+[[auth.default_logins]]
+email = "admin@example.com"
+password = "admin123"
+role_key = "super_admin"
+
+[[auth.default_logins]]
+email = "guest@example.com"
+password = "guest123"
+role_key = "analyst"
