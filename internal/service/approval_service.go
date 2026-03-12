@@ -19,13 +19,16 @@ func NewApprovalService(approvalRepo *repository.ApprovalRepository) *ApprovalSe
 	return &ApprovalService{ApprovalRepo: approvalRepo}
 }
 
-func (s *ApprovalService) CreateRequest(requesterID uuid.UUID, reqType, description, justification string, permissions []byte) (*models.ApprovalRequest, error) {
+// CreateRequest creates an approval request with the given metadata, permissions JSON, and requested items JSON.
+// requestedItemsJSON is stored in ApprovalRequest.RequestedItems ([]RequestedItem as JSON).
+func (s *ApprovalService) CreateRequest(requesterID uuid.UUID, reqType, description, justification string, permissions []byte, requestedItemsJSON []byte) (*models.ApprovalRequest, error) {
 	request := &models.ApprovalRequest{
 		Type:                 reqType,
 		RequesterID:          requesterID,
 		Description:          description,
 		Justification:        justification,
 		RequestedPermissions: permissions,
+		RequestedItems:       requestedItemsJSON,
 		Status:               "pending",
 		ExpiresAt:            time.Now().Add(24 * time.Hour), // Default 24h expiry
 	}

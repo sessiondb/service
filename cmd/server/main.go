@@ -102,7 +102,7 @@ func main() {
 	roleHandler := handlers.NewRoleHandler(roleService)
 	mailService := service.NewMailService(cfg)
 	userHandler := handlers.NewUserHandler(userService, roleService, mailService)
-	approvalHandler := handlers.NewApprovalHandler(approvalService)
+	approvalHandler := handlers.NewApprovalHandler(approvalService, instanceRepo)
 	queryHandler := handlers.NewQueryHandler(queryService)
 	auditHandler := handlers.NewAuditHandler(auditService, userRepo)
 	configHandler := handlers.NewConfigHandler(configService)
