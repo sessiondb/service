@@ -93,6 +93,15 @@ func (p *Permission) BeforeSave(tx *gorm.DB) error {
 	return nil
 }
 
+// RequestedItem describes one access request: instance/database/table and desired privileges.
+// Stored as part of ApprovalRequest.RequestedItems (JSONB array).
+type RequestedItem struct {
+	InstanceID uuid.UUID `json:"instanceId"`
+	Database   string    `json:"database"`
+	Table      string    `json:"table"`
+	Privileges []string  `json:"privileges"`
+}
+
 // ApprovalRequest model
 type ApprovalRequest struct {
 	Base
@@ -103,6 +112,7 @@ type ApprovalRequest struct {
 	Description          string     `json:"description"`
 	Justification        string     `json:"justification,omitempty"`
 	RequestedPermissions []byte     `gorm:"type:jsonb" json:"requestedPermissions,omitempty"` // Serialized permissions
+	RequestedItems       []byte     `gorm:"type:jsonb" json:"requestedItems,omitempty"`       // []RequestedItem
 	Status               string     `gorm:"default:'pending'" json:"status"`                  // pending, approved, rejected, partially_approved
 	ReviewedBy           *uuid.UUID `json:"reviewedBy,omitempty"`
 	ReviewedAt           *time.Time `json:"reviewedAt,omitempty"`
