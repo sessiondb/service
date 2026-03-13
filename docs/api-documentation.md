@@ -265,49 +265,85 @@ Development: http://localhost:3000/v1
 
 ## 5. Approval Workflows
 
+All approval endpoints are under `/v1/requests` and require the `advanced_approvals` feature and appropriate permissions.
+
+### Create Request
+**Endpoint**: `POST /v1/requests`
+
+**Request body**:
+```json
+{
+  "type": "DB_ACCESS",
+  "description": "Access to analytics DB for reporting",
+  "justification": "Need SELECT on orders and products",
+  "requestedItems": [
+    {
+      "instanceId": "uuid-of-instance",
+      "database": "analytics",
+      "table": "orders",
+      "privileges": ["SELECT"]
+    },
+    {
+      "instanceId": "uuid-of-instance",
+      "database": "analytics",
+      "table": "products",
+      "privileges": ["SELECT"]
+    }
+  ]
+}
+```
+
+- `requestedItems` is required and must have at least one item. Each item must have non-empty `instanceId`, `database`, `table`, and `privileges`. The instance must exist.
+- Requester is the authenticated user (from JWT).
+
 ### List Requests
-**Endpoint**: `GET /requests`
+**Endpoint**: `GET /v1/requests`
 
 **Response**:
 ```json
 [
   {
-    "id": "req_1",
-    "type": "TEMP_USER",
-    "requester": "external_dev",
-    "description": "Access to prod-read-only for debugging bug #102",
-    "timestamp": "2024-02-06 11:00",
+    "id": "req-uuid",
+    "type": "DB_ACCESS",
+    "requester": "Jane Doe",
+    "description": "Access to analytics DB for reporting",
+    "timestamp": "2024-02-06T11:00:00Z",
     "status": "pending",
-    "requestedPermissions": [
+    "requestedItems": [
       {
-        "database": "production",
+        "instanceId": "uuid",
+        "database": "analytics",
         "table": "orders",
-        "privileges": ["READ"],
-        "type": "temp",
-        "expiry": "24h"
+        "privileges": ["SELECT"]
       }
     ]
   }
 ]
 ```
 
+- Each request includes `requestedItems` (array of instanceId, database, table, privileges) for admin display.
+
 ### Update Request Status (Approve/Reject)
-**Endpoint**: `PUT /requests/:id`
+**Endpoint**: `PUT /v1/requests/:id`
 
 **Request (Approve)**:
 ```json
 {
-  "status": "approved",
-  "partialPermissions": [ ... ] // Optional: Send only if partially approving specific permissions
+  "status": "approved"
 }
 ```
+
+- On approve, the backend creates Permission records for the requester and provisions the DB user with the requested grants (see [Request/Approval Flow](./features/request-approval-flow.md)).
 
 **Request (Reject)**:
 ```json
 {
-  "status": "rejected"
+  "status": "rejected",
+  "rejectionReason": "Optional reason shown to requester"
 }
 ```
+
+- If `rejectionReason` is omitted, the backend uses a default message (e.g. "Rejected by user").
 
 ---
 
