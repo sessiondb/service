@@ -48,7 +48,7 @@ publish_community_docker:
     
     # --- STEP 3: CREATE GITHUB RELEASE ---
     - export GITHUB_TOKEN=$GH_TOKEN
-    - 'gh release create $CI_COMMIT_TAG --repo sessiondb/service --title "SessionDB BE $CI_COMMIT_TAG" --notes "Community Edition. Docker Image: $DOCKER_HUB_USER/sessiondb-be:$CI_COMMIT_TAG"'
+    - 'gh release create $CI_COMMIT_TAG --repo sessiondb/service --title "$CI_COMMIT_TAG" --notes "Community Edition. Docker Image: $DOCKER_HUB_USER/sessiondb-be:$CI_COMMIT_TAG"'
     # --- STEP 4: BUILD RELEASE ARTIFACTS (tar.gz + checksums) AND UPLOAD ---
     - mkdir -p dist _pkg_amd64 _pkg_arm64
     - GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o _pkg_amd64/sessiondb-server ./cmd/server
