@@ -213,15 +213,14 @@ func main() {
 			// "Notify me when this is ready" for roadmap features (waitlist)
 			protected.POST("/notify-me", featureNotifyHandler.Register)
 
+			// Requests/approvals: community (open source). Any authenticated user can create a request; list/approve/reject require approvals:manage.
 			requests := protected.Group("/requests")
+			requests.POST("", approvalHandler.CreateRequest)
+			requestsAdmin := requests.Group("")
+			requestsAdmin.Use(middleware.CheckPermission(utils.PermApprovalsManage))
 			{
-				requests.Use(middleware.FeatureGate("advanced_approvals"))
-				requests.Use(middleware.CheckPermission(utils.PermApprovalsManage))
-
-				requests.GET("", approvalHandler.GetRequests)
-				// Create request also mapped here? Docs say POST /approvals (now requests)
-				requests.POST("", approvalHandler.CreateRequest)
-				requests.PUT("/:id", approvalHandler.UpdateRequestStatus)
+				requestsAdmin.GET("", approvalHandler.GetRequests)
+				requestsAdmin.PUT("/:id", approvalHandler.UpdateRequestStatus)
 			}
 
 			// Keep /approvals for backward compatibility if needed, or remove.
