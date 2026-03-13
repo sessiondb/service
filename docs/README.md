@@ -55,6 +55,11 @@ Welcome to the SessionDB documentation. This directory contains comprehensive te
 - [Run migrations once](./features/run-migrations-once.md) — Run migrations once via Docker/Kubernetes (Job or one-off) and skip in app
 - [Default platform logins](./features/default-logins.md) — TOML default config and seeding default logins once on first run
 - [Request/Approval flow](./features/request-approval-flow.md) — DB access requests, requestedItems, and approve side effects
+- [Binders and versioned releases](./features/binders-and-releases.md) — Versioned zips, CLI, and tag convention
+
+### Versioned releases (binders)
+
+Binaries are published to **[sessiondb/.github](https://github.com/sessiondb/.github)** under `releases/<version>/binaries/`. When you push a version tag (e.g. `1.0.1`) to sessiondb/.github, the workflow there clones this backend and the frontend at that tag, builds both, and pushes the result to `releases/<version>/binaries/`. Use plain version tags in backend and frontend so they match (e.g. `1.0.1`).
 
 ---
 

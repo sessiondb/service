@@ -29,8 +29,8 @@ publish_community_docker:
   only:
     - tags
   before_script:
-    # 1. Install Git, OpenSSH, and GitHub CLI
-    - apk add --no-cache git openssh github-cli
+    # 1. Install Git, OpenSSH, GitHub CLI, and Go (for release artifacts)
+    - apk add --no-cache git openssh github-cli go
     - git config --global user.name "GitLab CI Bot"
     - git config --global user.email "ci-bot@sessiondb.com"
     - echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USER" --password-stdin
@@ -47,10 +47,17 @@ publish_community_docker:
     - git push --force https://x-access-token:${GH_TOKEN}@github.com/sessiondb/service.git docker-build-temp:$CI_COMMIT_TAG
     
     # --- STEP 3: CREATE GITHUB RELEASE ---
-    # This creates the 'Release' UI on GitHub with the 'Pre-release' badge
     - export GITHUB_TOKEN=$GH_TOKEN
     - 'gh release create $CI_COMMIT_TAG --repo sessiondb/service --title "SessionDB BE $CI_COMMIT_TAG" --notes "Community Edition. Docker Image: $DOCKER_HUB_USER/sessiondb-be:$CI_COMMIT_TAG"'
-    # --- STEP 4: DOCKER BUILD & PUSH ---
+    # --- STEP 4: BUILD RELEASE ARTIFACTS (tar.gz + checksums) AND UPLOAD ---
+    - mkdir -p dist _pkg_amd64 _pkg_arm64
+    - GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o _pkg_amd64/sessiondb-server ./cmd/server
+    - GOOS=linux GOARCH=arm64 go build -ldflags "-s -w" -o _pkg_arm64/sessiondb-server ./cmd/server
+    - tar czf dist/sessiondb-backend-linux-amd64.tar.gz -C _pkg_amd64 sessiondb-server
+    - tar czf dist/sessiondb-backend-linux-arm64.tar.gz -C _pkg_arm64 sessiondb-server
+    - cd dist && sha256sum sessiondb-backend-linux-amd64.tar.gz sessiondb-backend-linux-arm64.tar.gz > checksums.txt && cd ..
+    - gh release upload $CI_COMMIT_TAG dist/sessiondb-backend-linux-amd64.tar.gz dist/sessiondb-backend-linux-arm64.tar.gz dist/checksums.txt --repo sessiondb/service
+    # --- STEP 5: DOCKER BUILD & PUSH ---
     - export IMAGE_TAG=$CI_COMMIT_TAG
     - docker build -t $DOCKER_HUB_USER/sessiondb-be:$IMAGE_TAG .
     - docker tag $DOCKER_HUB_USER/sessiondb-be:$IMAGE_TAG $DOCKER_HUB_USER/sessiondb-be:latest
