@@ -16,11 +16,25 @@ services:
       - DB_PORT=5432
       - REDIS_ADDR=redis:6379
       - DB_CREDENTIAL_ENCRYPTION_KEY=12345678901234567890123456789012
+      - MIGRATE_TOKEN=${MIGRATE_TOKEN}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
+
+  migrate-via-api:
+    image: curlimages/curl:latest
+    command:
+      - sh
+      - -c
+      - |
+        until curl -sf http://app:8080/health; do echo "waiting for app"; sleep 2; done
+        curl -sf -X POST http://app:8080/v1/migrate -H "X-Migrate-Token: $$MIGRATE_TOKEN"
+    environment:
+      - MIGRATE_TOKEN=${MIGRATE_TOKEN}
+    depends_on:
+      - app
 
   postgres:
     image: postgres:15-alpine
