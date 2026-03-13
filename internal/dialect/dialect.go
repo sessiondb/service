@@ -20,6 +20,8 @@ type DatabaseDialect interface {
 	BuildDSN(instance *models.DBInstance, dbName string) string
 	// BuildAdminDSN returns a DSN for admin operations (user creation, grants). Uses admin credentials.
 	BuildAdminDSN(instance *models.DBInstance) string
+	// BuildDSNForGrant returns the DSN to use when executing GRANT for a table in targetDatabase (e.g. Postgres must connect to that DB; MySQL may use admin DSN).
+	BuildDSNForGrant(instance *models.DBInstance, targetDatabase string) string
 	// BuildDSNForUser returns a DSN for the given database using the provided username and password (e.g. for query execution with user creds).
 	BuildDSNForUser(instance *models.DBInstance, dbName, username, password string) string
 

@@ -66,22 +66,48 @@ func (s *QueryService) SetOnQueryExecuted(hook OnQueryExecutedHook) {
 	s.OnQueryExecuted = hook
 }
 
-func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, query, ipAddress, userAgent string) (interface{}, error) {
+// inferDatabaseFromPermissions returns a single database to connect to when the client did not send one.
+// If the user has exactly one distinct database in their permissions (ignoring "*"), that database is returned.
+// Otherwise returns "" so the dialect uses its default (e.g. "postgres" for Postgres).
+func inferDatabaseFromPermissions(perms []models.Permission) string {
+	seen := make(map[string]struct{})
+	for _, p := range perms {
+		db := strings.TrimSpace(p.Database)
+		if db == "" || db == "*" {
+			continue
+		}
+		seen[db] = struct{}{}
+	}
+	if len(seen) == 1 {
+		for db := range seen {
+			return db
+		}
+	}
+	return ""
+}
+
+func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, database, query, ipAddress, userAgent string) (interface{}, error) {
 	// Lookup instance
 	instance, err := s.InstanceRepo.FindByID(instanceID)
 	if err != nil {
 		return nil, fmt.Errorf("instance not found: %w", err)
 	}
 
-	// Data access check: user must have at least one permission on this instance
+	var perms []models.Permission
 	if s.AccessEngine != nil {
-		perms, err := s.AccessEngine.GetEffectivePermissions(context.Background(), userID, instanceID)
-		if err != nil {
-			return nil, fmt.Errorf("access check: %w", err)
+		var accessErr error
+		perms, accessErr = s.AccessEngine.GetEffectivePermissions(context.Background(), userID, instanceID)
+		if accessErr != nil {
+			return nil, fmt.Errorf("access check: %w", accessErr)
 		}
 		if len(perms) == 0 {
 			return nil, apierrors.NewAppError(403, apierrors.CodeForbidden, "no data access to this instance")
 		}
+	}
+
+	// When client omits database, infer from user's permissions so we connect to the right DB (e.g. Postgres).
+	if database == "" && len(perms) > 0 {
+		database = inferDatabaseFromPermissions(perms)
 	}
 
 	// Resolve credentials: try user-level creds first, fall back to admin
@@ -109,7 +135,7 @@ func (s *QueryService) ExecuteQuery(userID uuid.UUID, instanceID uuid.UUID, quer
 	if err != nil {
 		return nil, fmt.Errorf("unsupported database type: %w", err)
 	}
-	dsn := d.BuildDSNForUser(instance, "", dbUser, dbPass)
+	dsn := d.BuildDSNForUser(instance, database, dbUser, dbPass)
 	db, err := sql.Open(d.DriverName(), dsn)
 	if err != nil {
 		if usingUserCreds && isAuthError(err) {

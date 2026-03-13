@@ -23,6 +23,7 @@ func NewQueryHandler(service *service.QueryService) *QueryHandler {
 type ExecuteQueryRequest struct {
 	InstanceID string `json:"instanceId" binding:"required"`
 	Query      string `json:"query" binding:"required"`
+	Database   string `json:"database"` // optional; for Postgres, connection uses this DB (default "postgres" when empty)
 }
 
 type SaveScriptRequest struct {
@@ -49,7 +50,7 @@ func (h *QueryHandler) ExecuteQuery(c *gin.Context) {
 	ipAddress := c.ClientIP()
 	userAgent := c.Request.UserAgent()
 
-	result, err := h.Service.ExecuteQuery(userID, instanceID, req.Query, ipAddress, userAgent)
+	result, err := h.Service.ExecuteQuery(userID, instanceID, req.Database, req.Query, ipAddress, userAgent)
 	if err != nil {
 		// Use the sentinel AppError if it's one of ours, otherwise wrap it
 		var appErr *apierrors.AppError
