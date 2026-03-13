@@ -15,7 +15,7 @@ github_community_sync:
   script:
     - git checkout -b github-sync-temp
     - mv .gitignore.community .gitignore
-    - rm -rf internal/premium/ src/features/Premium/ .gitlab-ci.yml
+    - rm -rf internal/premium/ src/features/Premium/ .gitlab-ci.yml docs/plans docs/features
     - git add .
     - git commit -m "[chore] sync community edition [skip ci]" || echo "No changes to sync"
     - git push --force https://x-access-token:${GH_TOKEN}@github.com/sessiondb/service.git github-sync-temp:main
@@ -38,7 +38,7 @@ publish_community_docker:
     # --- STEP 1: PREPARE SCRUBBED CODE ---
     - git checkout -b docker-build-temp
     - mv .gitignore.community .gitignore
-    - rm -rf internal/premium/ src/features/Premium/ .gitlab-ci.yml
+    - rm -rf internal/premium/ src/features/Premium/ .gitlab-ci.yml docs/plans docs/features
     - git add .
     - 'git commit -m "chore: sync community edition $CI_COMMIT_TAG [skip ci]" || echo "No changes"'
 
