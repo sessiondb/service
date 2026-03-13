@@ -4,6 +4,9 @@ package main
 
 import (
 	"log"
+	"os"
+	"strings"
+
 	sessionapi "sessiondb/internal/api"
 	"sessiondb/internal/api/handlers"
 	"sessiondb/internal/api/middleware"
@@ -17,6 +20,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// skipDefaultLogins returns true if env SKIP_DEFAULT_LOGINS is set to true/1/yes (case-insensitive).
+func skipDefaultLogins() bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv("SKIP_DEFAULT_LOGINS")))
+	return v == "true" || v == "1" || v == "yes"
+}
+
 func main() {
 	// Load Config
 	cfg, err := config.LoadConfig()
@@ -24,10 +33,16 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Connect to Database
+	// Migrate-only mode: run migrations and exit (for Docker entrypoint or K8s Job).
+	if len(os.Args) > 1 && strings.TrimSpace(strings.ToLower(os.Args[1])) == "migrate" {
+		repository.ConnectDB(cfg)
+		repository.Migrate()
+		log.Println("Migration complete, exiting.")
+		os.Exit(0)
+	}
+
+	// Connect to Database (migrations are run via POST /v1/migrate or Docker entrypoint, not on startup)
 	repository.ConnectDB(cfg)
-	// Run Migrations
-	repository.Migrate()
 
 	// Initialize Repositories
 	userRepo := repository.NewUserRepository(repository.DB)
@@ -44,6 +59,13 @@ func main() {
 	aiUsageRepo := repository.NewAIUsageRepository(repository.DB)
 	featureNotifyRepo := repository.NewFeatureNotifyRepository(repository.DB)
 
+	// Seed default platform logins from TOML once when no users exist (unless SKIP_DEFAULT_LOGINS is set)
+	if !skipDefaultLogins() {
+		if err := service.SeedDefaultLogins(cfg, userRepo, roleRepo); err != nil {
+			log.Printf("Seed default logins: %v (continuing)", err)
+		}
+	}
+
 	// Initialize new Mock Tenant Client early so it can be injected
 	tenantClient := service.NewMockTenantClient()
 
@@ -54,7 +76,7 @@ func main() {
 	provisioningService := service.NewDBUserProvisioningService(dbUserCredRepo, instanceRepo)
 	userService := service.NewUserService(userRepo, provisioningService, instanceRepo)
 	configService := service.NewConfigService()
-	approvalService := service.NewApprovalService(approvalRepo)
+	approvalService := service.NewApprovalService(approvalRepo, permRepo, provisioningService, instanceRepo, userRepo)
 	queryService := service.NewQueryService(queryRepo, cfg)
 	queryService.SetInstanceRepo(instanceRepo)     // Inject instance repo for query execution
 	queryService.SetAuditService(auditService)     // Inject audit service for history logging
@@ -80,7 +102,7 @@ func main() {
 	roleHandler := handlers.NewRoleHandler(roleService)
 	mailService := service.NewMailService(cfg)
 	userHandler := handlers.NewUserHandler(userService, roleService, mailService)
-	approvalHandler := handlers.NewApprovalHandler(approvalService)
+	approvalHandler := handlers.NewApprovalHandler(approvalService, instanceRepo)
 	queryHandler := handlers.NewQueryHandler(queryService)
 	auditHandler := handlers.NewAuditHandler(auditService, userRepo)
 	configHandler := handlers.NewConfigHandler(configService)
@@ -99,7 +121,7 @@ func main() {
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Migrate-Token")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
 
 		if c.Request.Method == "OPTIONS" {
@@ -132,6 +154,9 @@ func main() {
 			confs.GET("/auth", configHandler.GetAuthConfig)
 			confs.PUT("/auth", configHandler.UpdateAuthConfig)
 		}
+
+		// Migrate: run DB migrations via API (protected by MIGRATE_TOKEN). Used by Docker/K8s to run migrations once.
+		api.POST("/migrate", middleware.MigrateTokenAuth(), handlers.RunMigrate)
 
 		// Protected Routes
 		protected := api.Group("/")
@@ -188,15 +213,14 @@ func main() {
 			// "Notify me when this is ready" for roadmap features (waitlist)
 			protected.POST("/notify-me", featureNotifyHandler.Register)
 
+			// Requests/approvals: community (open source). Any authenticated user can create a request; list/approve/reject require approvals:manage.
 			requests := protected.Group("/requests")
+			requests.POST("", approvalHandler.CreateRequest)
+			requestsAdmin := requests.Group("")
+			requestsAdmin.Use(middleware.CheckPermission(utils.PermApprovalsManage))
 			{
-				requests.Use(middleware.FeatureGate("advanced_approvals"))
-				requests.Use(middleware.CheckPermission(utils.PermApprovalsManage))
-
-				requests.GET("", approvalHandler.GetRequests)
-				// Create request also mapped here? Docs say POST /approvals (now requests)
-				requests.POST("", approvalHandler.CreateRequest)
-				requests.PUT("/:id", approvalHandler.UpdateRequestStatus)
+				requestsAdmin.GET("", approvalHandler.GetRequests)
+				requestsAdmin.PUT("/:id", approvalHandler.UpdateRequestStatus)
 			}
 
 			// Keep /approvals for backward compatibility if needed, or remove.

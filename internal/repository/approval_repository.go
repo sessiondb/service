@@ -23,7 +23,7 @@ func (r *ApprovalRepository) Create(request *models.ApprovalRequest) error {
 
 func (r *ApprovalRepository) FindByID(id uuid.UUID) (*models.ApprovalRequest, error) {
 	var request models.ApprovalRequest
-	err := r.DB.Preload("Requester").Preload("TargetUser").First(&request, id).Error
+	err := r.DB.Preload("Requester").First(&request, id).Error
 	if err != nil {
 		return nil, err
 	}

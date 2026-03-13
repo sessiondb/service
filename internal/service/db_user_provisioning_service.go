@@ -4,6 +4,7 @@ package service
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"sessiondb/internal/dialect"
 	"sessiondb/internal/models"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 type DBUserProvisioningService struct {
@@ -120,6 +122,7 @@ func (s *DBUserProvisioningService) createDBUserOnInstance(instance *models.DBIn
 }
 
 // GrantPermissions grants permissions to a DB user using the instance's dialect.
+// For PostgreSQL, each GRANT runs in the context of the permission's database (table is resolved in the connected DB), so we connect to that database per permission.
 func (s *DBUserProvisioningService) GrantPermissions(cred *models.DBUserCredential, permissions []models.Permission) error {
 	instance, err := s.InstanceRepo.FindByID(cred.InstanceID)
 	if err != nil {
@@ -129,14 +132,15 @@ func (s *DBUserProvisioningService) GrantPermissions(cred *models.DBUserCredenti
 	if err != nil {
 		return err
 	}
-	dsn := d.BuildAdminDSN(instance)
-	db, err := sql.Open(d.DriverName(), dsn)
-	if err != nil {
-		return fmt.Errorf("failed to connect to instance: %w", err)
-	}
-	defer db.Close()
 	for _, perm := range permissions {
-		if err := s.grantPermission(db, d, cred.DBUsername, perm); err != nil {
+		dsn := d.BuildDSNForGrant(instance, perm.Database)
+		db, err := sql.Open(d.DriverName(), dsn)
+		if err != nil {
+			return fmt.Errorf("failed to connect to instance: %w", err)
+		}
+		err = s.grantPermission(db, d, cred.DBUsername, perm)
+		db.Close()
+		if err != nil {
 			return fmt.Errorf("failed to grant permission: %w", err)
 		}
 	}
@@ -151,6 +155,11 @@ func (s *DBUserProvisioningService) grantPermission(db *sql.DB, d dialect.Databa
 	}
 	grantSQL := d.GrantTableSQL(username, perm.Database, schema, perm.Table, perm.Privileges)
 	if _, err := db.Exec(grantSQL); err != nil {
+		// PostgreSQL: 42P01 = undefined_table (relation does not exist)
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "42P01" {
+			return fmt.Errorf("table %q.%q does not exist in the target instance (database %q); create the table or correct the request: %w", schema, perm.Table, perm.Database, err)
+		}
 		return fmt.Errorf("failed to execute GRANT: %w", err)
 	}
 	return nil

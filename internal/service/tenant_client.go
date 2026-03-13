@@ -42,8 +42,7 @@ func (m *MockTenantClient) GetFeaturesForTenant(tenantID string) (TenantFeatures
 			Enabled: true,
 		},
 		"advanced_approvals": {
-			Enabled:     false,
-			MinimumPlan: "Enterprise",
+			Enabled: true, // Community: requests/approvals are open source
 		},
 	}, nil
 }

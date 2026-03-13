@@ -4,16 +4,25 @@ package config
 
 import (
 	"log"
+	"os"
 
 	"github.com/spf13/viper"
 )
 
+// DefaultLogin represents a single default login entry from TOML auth.default_logins.
+type DefaultLogin struct {
+	Email    string `mapstructure:"email"`
+	Password string `mapstructure:"password"`
+	RoleKey  string `mapstructure:"role_key"`
+}
+
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Redis    RedisConfig
-	JWT      JWTConfig
-	Mail     MailConfig
+	Server      ServerConfig
+	Database    DatabaseConfig
+	Redis       RedisConfig
+	JWT         JWTConfig
+	Mail        MailConfig
+	DefaultLogins []DefaultLogin
 }
 
 // MailConfig for sending credentials email on user create. When disabled, SendCredentialsEmail is a no-op.
@@ -109,6 +118,28 @@ func LoadConfig() (*Config, error) {
 			SMTPUser: viper.GetString("MAIL_SMTP_USER"),
 			SMTPPass: viper.GetString("MAIL_SMTP_PASS"),
 		},
+	}
+
+	// Optionally load [auth] default_logins from TOML (env/server remain from .env above).
+	tomlPath := os.Getenv("CONFIG_TOML_PATH")
+	if tomlPath == "" {
+		tomlPath = "config.default.toml"
+	}
+	if _, err := os.Stat(tomlPath); err == nil {
+		v := viper.New()
+		v.SetConfigFile(tomlPath)
+		if err := v.ReadInConfig(); err != nil {
+			log.Printf("Could not load TOML config %s: %v. DefaultLogins left nil.", tomlPath, err)
+		} else {
+			var authSection struct {
+				DefaultLogins []DefaultLogin `mapstructure:"default_logins"`
+			}
+			if err := v.UnmarshalKey("auth", &authSection); err != nil {
+				log.Printf("Could not unmarshal auth from %s: %v. DefaultLogins left nil.", tomlPath, err)
+			} else {
+				config.DefaultLogins = authSection.DefaultLogins
+			}
+		}
 	}
 
 	return config, nil

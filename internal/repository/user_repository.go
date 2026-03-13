@@ -17,6 +17,13 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 	return &UserRepository{DB: db}
 }
 
+// Count returns the total number of users in the database.
+func (r *UserRepository) Count() (int64, error) {
+	var count int64
+	err := r.DB.Model(&models.User{}).Count(&count).Error
+	return count, err
+}
+
 func (r *UserRepository) Create(user *models.User) error {
 	return r.DB.Create(user).Error
 }

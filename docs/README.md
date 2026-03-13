@@ -52,6 +52,9 @@ Welcome to the SessionDB documentation. This directory contains comprehensive te
 - [AI Query (BYOK)](./features/ai-query.md) — BYOK config, org vs user config, usage dashboard, SQL markdown strip
 - [Access Control](./features/access-control.md) — Column-to-instance access control
 - [User creation and credentials](./features/user-creation-and-credentials.md) — Platform/DB user creation, send credentials by email, existing-user semantics
+- [Run migrations once](./features/run-migrations-once.md) — Run migrations once via Docker/Kubernetes (Job or one-off) and skip in app
+- [Default platform logins](./features/default-logins.md) — TOML default config and seeding default logins once on first run
+- [Request/Approval flow](./features/request-approval-flow.md) — DB access requests, requestedItems, and approve side effects
 
 ---
 

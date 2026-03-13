@@ -29,6 +29,11 @@ func (d *PostgresDialect) BuildAdminDSN(instance *models.DBInstance) string {
 	return buildPostgresDSN(instance.Host, instance.Port, instance.Username, instance.Password, "postgres")
 }
 
+// BuildDSNForGrant returns a DSN for the target database so GRANT ON TABLE is resolved in that database.
+func (d *PostgresDialect) BuildDSNForGrant(instance *models.DBInstance, targetDatabase string) string {
+	return d.BuildDSN(instance, targetDatabase)
+}
+
 func (d *PostgresDialect) BuildDSNForUser(instance *models.DBInstance, dbName, username, password string) string {
 	if dbName == "" {
 		dbName = "postgres"

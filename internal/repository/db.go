@@ -81,6 +81,10 @@ func Migrate() {
 	// Migrate roles.key BEFORE AutoMigrate so existing rows get backfilled (avoid NOT NULL on new column).
 	migrateRolesKey()
 
+	// Ensure approval_requests has requested_items and rejection_reason (for DBs created before these columns existed).
+	DB.Exec(`ALTER TABLE approval_requests ADD COLUMN IF NOT EXISTS requested_items JSONB`)
+	DB.Exec(`ALTER TABLE approval_requests ADD COLUMN IF NOT EXISTS rejection_reason TEXT`)
+
 	err := DB.AutoMigrate(
 		&models.User{},
 		&models.Role{},

@@ -33,6 +33,11 @@ func (d *MySQLDialect) BuildAdminDSN(instance *models.DBInstance) string {
 		instance.Username, instance.Password, instance.Host, instance.Port)
 }
 
+// BuildDSNForGrant returns the admin DSN; MySQL GRANT uses database-qualified table names.
+func (d *MySQLDialect) BuildDSNForGrant(instance *models.DBInstance, targetDatabase string) string {
+	return d.BuildAdminDSN(instance)
+}
+
 // BuildDSNForUser builds a DSN with the given username and password. User and password are
 // URL-encoded so special characters (@ : / etc.) do not break the connection string.
 func (d *MySQLDialect) BuildDSNForUser(instance *models.DBInstance, dbName, username, password string) string {
