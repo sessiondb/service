@@ -1,16 +1,16 @@
 [server]
 port = "8080"
-mode = "debug"
+mode = "production"
 
 [auth]
 # Optional: JWT defaults could go here later
 
 [[auth.default_logins]]
-email = "admin@example.com"
+email = "admin@sessiondb.internal"
 password = "admin123"
 role_key = "super_admin"
 
 [[auth.default_logins]]
-email = "guest@example.com"
+email = "guest@sessiondb.internal"
 password = "guest123"
 role_key = "analyst"

@@ -9,6 +9,14 @@ import (
 	"github.com/spf13/viper"
 )
 
+func getwd() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "<error>"
+	}
+	return dir
+}
+
 // DefaultLogin represents a single default login entry from TOML auth.default_logins.
 type DefaultLogin struct {
 	Email    string `mapstructure:"email"`
@@ -125,7 +133,9 @@ func LoadConfig() (*Config, error) {
 	if tomlPath == "" {
 		tomlPath = "config.default.toml"
 	}
-	if _, err := os.Stat(tomlPath); err == nil {
+	if _, err := os.Stat(tomlPath); err != nil {
+		log.Printf("Config file %s not found (cwd: %s). Default logins will not be seeded. Set CONFIG_TOML_PATH to override.", tomlPath, getwd())
+	} else {
 		v := viper.New()
 		v.SetConfigFile(tomlPath)
 		if err := v.ReadInConfig(); err != nil {
@@ -138,6 +148,13 @@ func LoadConfig() (*Config, error) {
 				log.Printf("Could not unmarshal auth from %s: %v. DefaultLogins left nil.", tomlPath, err)
 			} else {
 				config.DefaultLogins = authSection.DefaultLogins
+				// Viper may store [[auth.default_logins]] under "auth.default_logins" rather than nested under "auth"
+				if len(config.DefaultLogins) == 0 {
+					_ = v.UnmarshalKey("auth.default_logins", &config.DefaultLogins)
+				}
+				if len(config.DefaultLogins) > 0 {
+					log.Printf("Loaded %d default login(s) from %s", len(config.DefaultLogins), tomlPath)
+				}
 			}
 		}
 	}
