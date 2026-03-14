@@ -8,7 +8,8 @@ Allow predefined platform users (e.g. admin, guest) to be created from a TOML co
 
 ### TOML file
 
-- **Path:** `config.default.toml` at the repo root, or set `CONFIG_TOML_PATH` to another path.
+- **Preferred:** Use the single **config.toml** created by `scli init`; it includes `[auth]` with `[[auth.default_logins]]`. See [config.toml](config-toml.md).
+- **Legacy / override:** `config.default.toml` at the repo root, or set `CONFIG_TOML_PATH` to a TOML path.
 - **Structure:**
   - `[server]` — optional defaults for port, mode (env still overrides).
   - `[auth]` with `[[auth.default_logins]]` — list of default platform logins.
@@ -55,7 +56,7 @@ role_key = "analyst"
 
 | Topic | Detail |
 |-------|--------|
-| **File** | `config.default.toml` or `CONFIG_TOML_PATH` |
+| **File** | `config.toml` (from scli init) or `config.default.toml` / `CONFIG_TOML_PATH` |
 | **When** | Once on first run (no users in DB) |
 | **Skip** | `SKIP_DEFAULT_LOGINS=true` (or `1`/`yes`) |
 | **Role** | `role_key` must match a seeded role key |
