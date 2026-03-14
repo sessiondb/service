@@ -20,6 +20,7 @@ import (
 // creates user with email, password hash, role_id, and a name. If role is not found, skips that entry and logs.
 func SeedDefaultLogins(cfg *config.Config, userRepo *repository.UserRepository, roleRepo *repository.RoleRepository) error {
 	if cfg == nil || cfg.DefaultLogins == nil || len(cfg.DefaultLogins) == 0 {
+		log.Printf("Seed default logins: skipped (no default_logins in config or config not loaded)")
 		return nil
 	}
 	count, err := userRepo.Count()
@@ -27,8 +28,10 @@ func SeedDefaultLogins(cfg *config.Config, userRepo *repository.UserRepository, 
 		return err
 	}
 	if count > 0 {
+		log.Printf("Seed default logins: skipped (%d user(s) already exist)", count)
 		return nil
 	}
+	created := 0
 	for _, dl := range cfg.DefaultLogins {
 		_, err := userRepo.FindByEmail(dl.Email)
 		if err == nil {
@@ -56,6 +59,11 @@ func SeedDefaultLogins(cfg *config.Config, userRepo *repository.UserRepository, 
 		if err := userRepo.Create(user); err != nil {
 			return err
 		}
+		created++
+		log.Printf("Seed default logins: created user %s (role %s)", dl.Email, dl.RoleKey)
+	}
+	if created > 0 {
+		log.Printf("Seed default logins: created %d user(s)", created)
 	}
 	return nil
 }
